@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+:root {
+  --primary-blue: #2583e8;
+  --deep-blue: #174a8b;
+  --sky-blue: #ddf0ff;
+  --soft-blue: #f3f8ff;
+  --accent-yellow: #ffd45a;
+  --warm-yellow: #fff4c7;
+  --text-primary: #172b45;
+  --text-secondary: #617187;
+  --border: #dce6f1;
+  --surface: #ffffff;
+  --success: #23845b;
+  --warning: #a96508;
+  --error: #c43d4b;
+}
+
+body {
+  background-color: var(--soft-blue);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar for lab panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Accessible focus ring */
+:focus-visible {
+  outline: 2px solid var(--primary-blue);
+  outline-offset: 2px;
+}
