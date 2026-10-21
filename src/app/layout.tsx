@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Suspense } from "react";
 import "./globals.css";
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
+import AppShell from "@/components/layout/AppShell";
 import ServiceWorkerRegister from "@/components/layout/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
@@ -17,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2583E8",
+  themeColor: "#0D1D2D",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5
@@ -30,13 +28,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id" className="h-full">
-      <body className="min-h-full flex flex-col bg-[#F3F8FF] text-[#172B45] antialiased">
+      <body className="min-h-full bg-[#F4F7FB] text-[#172B45] antialiased">
         <ServiceWorkerRegister />
-        <Suspense fallback={<div className="h-16 bg-white border-b border-[#DCE6F1]" />}>
-          <Navbar />
-        </Suspense>
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
