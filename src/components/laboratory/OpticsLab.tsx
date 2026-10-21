@@ -15,6 +15,12 @@ import {
   Compass
 } from "lucide-react";
 import { TopicData } from "@/types";
+import {
+  playClickSound,
+  playLaserSound,
+  playResetSound,
+  playSuccessChime
+} from "@/lib/audio";
 
 interface OpticsLabProps {
   topic: TopicData;
@@ -93,6 +99,7 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
   ]);
 
   const handleReset = () => {
+    playResetSound();
     setLabMode("ray");
     setIncidentAngle(45);
     setObjectDistance(20);
@@ -104,6 +111,7 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
   };
 
   const handleRecordData = () => {
+    playClickSound();
     const entry: OpticsDataPoint = {
       id: Date.now(),
       incidentAngle,
@@ -235,7 +243,45 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
               <marker id="arrow-ray-out" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1 L 10 5 L 0 9 z" fill="#2583E8" />
               </marker>
+              {/* Radial glow filter for laser */}
+              <filter id="laser-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              {/* Radial glow filter for candle flame */}
+              <filter id="flame-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
             </defs>
+
+            {/* Embedded CSS for Realistic Fluid Optics Motion */}
+            <style>{`
+              @keyframes flameFlicker {
+                0% { transform: scale(1) translateY(0); }
+                50% { transform: scale(1.08, 0.93) translateY(-1px); }
+                100% { transform: scale(1) translateY(0); }
+              }
+              .candle-flame-anim {
+                animation: flameFlicker 0.4s ease-in-out infinite;
+                transform-origin: 0px -40px;
+              }
+              @keyframes laserCorePulse {
+                0% { opacity: 0.85; stroke-width: 3.5; }
+                50% { opacity: 1; stroke-width: 4.5; }
+                100% { opacity: 0.85; stroke-width: 3.5; }
+              }
+              .laser-pulse-stream {
+                animation: laserCorePulse 1.2s ease-in-out infinite;
+              }
+            `}</style>
+
             <rect width="800" height="300" fill="url(#optics-grid)" />
 
             {/* Behind the mirror zone shading (Virtual domain x > 400) */}
@@ -313,26 +359,37 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
             {/* RAY MODE RENDERING */}
             {labMode === "ray" && (
               <g>
-                {/* 1. Incident Ray (Sinar Datang) */}
+                {/* 1. Incident Ray (Sinar Datang) with Glow Core */}
                 <line
                   x1={sourceX}
                   y1={sourceY}
                   x2={mirrorX}
                   y2={hitY}
                   stroke="#EA580C"
-                  strokeWidth="3.5"
+                  strokeWidth="4"
+                  className="laser-pulse-stream"
                   markerMid="url(#arrow-ray-in)"
                 />
-                {/* Mid-point arrow indicator */}
+                {/* Laser Ray Inner Core */}
+                <line
+                  x1={sourceX}
+                  y1={sourceY}
+                  x2={mirrorX}
+                  y2={hitY}
+                  stroke="#FFD45A"
+                  strokeWidth="1.8"
+                />
+                {/* Mid-point indicator */}
                 <circle cx={(sourceX + mirrorX) / 2} cy={(sourceY + hitY) / 2} r="3" fill="#EA580C" />
 
                 {/* Laser Source Graphic (Draggable) */}
                 <g
                   transform={`translate(${sourceX - 25}, ${sourceY - 14})`}
-                  className="cursor-grab active:cursor-grabbing"
+                  className="cursor-grab active:cursor-grabbing group"
                   onPointerDown={(e) => {
                     const svg = e.currentTarget.ownerSVGElement;
                     if (!svg) return;
+                    playLaserSound();
                     const handleMove = (moveEvt: PointerEvent) => {
                       const rect = svg.getBoundingClientRect();
                       const curX = moveEvt.clientX - rect.left;
@@ -354,9 +411,9 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                     window.addEventListener("pointerup", handleUp);
                   }}
                 >
-                  <rect x="0" y="0" width="44" height="24" rx="4" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
-                  <rect x="40" y="6" width="8" height="12" rx="1" fill="#EA580C" />
-                  <text x="20" y="16" fill="#FFFFFF" fontSize="9" fontWeight="bold" textAnchor="middle">
+                  <rect x="0" y="0" width="46" height="26" rx="5" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
+                  <rect x="42" y="7" width="8" height="12" rx="1.5" fill="#EA580C" />
+                  <text x="21" y="17" fill="#FFFFFF" fontSize="9" fontWeight="bold" textAnchor="middle">
                     LASER
                   </text>
                 </g>
@@ -387,14 +444,23 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                       x2={reflectedX}
                       y2={reflectedY}
                       stroke="#2583E8"
-                      strokeWidth="3.5"
+                      strokeWidth="4"
+                      className="laser-pulse-stream"
                       markerMid="url(#arrow-ray-out)"
+                    />
+                    <line
+                      x1={mirrorX}
+                      y1={hitY}
+                      x2={reflectedX}
+                      y2={reflectedY}
+                      stroke="#93C5FD"
+                      strokeWidth="1.8"
                     />
                     <circle cx={(mirrorX + reflectedX) / 2} cy={(hitY + reflectedY) / 2} r="3" fill="#2583E8" />
 
                     {/* Reflected Angle Arc */}
                     <path
-                      d={`M ${mirrorX - 60} ${hitY} A 60 60 0 0 1 ${mirrorX - 60 * Math.cos(rad)} ${hitY + 60 * Math.sin(rad)}`}
+                      d={`M ${mirrorX - 60} ${hitY} A 60 60 0 1 ${mirrorX - 60 * Math.cos(rad)} ${hitY + 60 * Math.sin(rad)}`}
                       fill="none"
                       stroke="#2583E8"
                       strokeWidth="2"
@@ -429,7 +495,8 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                   </g>
                 )}
 
-                {/* Point of Incidence O */}
+                {/* Point of Incidence O with Shimmering Glint */}
+                <circle cx={mirrorX} cy={hitY} r="8" fill="#FEE2E2" opacity="0.8" filter="url(#laser-glow)" className="animate-ping" />
                 <circle cx={mirrorX} cy={hitY} r="5" fill="#EF4444" stroke="#FFFFFF" strokeWidth="2" />
                 <text x={mirrorX - 18} y={hitY - 10} fill="#1E293B" fontSize="11" fontWeight="bold">
                   Titik O
@@ -441,14 +508,15 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
             {labMode === "object" && (() => {
               const objX = mirrorX - objectDistance * 7.5;
               const imgX = mirrorX + objectDistance * 7.5;
-              const objY = hitY;
+              const objY = hitY + 25;
+              const h = objectHeight;
 
               return (
                 <g>
-                  {/* Object: Candle (Draggable) */}
+                  {/* Object: Real Candle (Draggable) */}
                   <g
                     transform={`translate(${objX}, ${objY})`}
-                    className="cursor-grab active:cursor-grabbing"
+                    className="cursor-grab active:cursor-grabbing group"
                     onPointerDown={(e) => {
                       const svg = e.currentTarget.ownerSVGElement;
                       if (!svg) return;
@@ -469,22 +537,27 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                     }}
                   >
                     {/* Candle body */}
-                    <rect x="-8" y="-objectHeight" width="16" height={objectHeight} rx="2" fill="#F59E0B" stroke="#D97706" strokeWidth="1.5" />
-                    {/* Candle Flame */}
-                    <path
-                      d="M 0 -objectHeight Q -6 -objectHeight-12 0 -objectHeight-20 Q 6 -objectHeight-12 0 -objectHeight"
-                      fill="#EF4444"
-                    />
-                    <path
-                      d="M 0 -objectHeight-2 Q -3 -objectHeight-10 0 -objectHeight-16 Q 3 -objectHeight-10 0 -objectHeight-2"
-                      fill="#FBBF24"
-                    />
+                    <rect x="-8" y={-h} width="16" height={h} rx="3" fill="#F59E0B" stroke="#D97706" strokeWidth="1.5" />
+                    {/* Wick */}
+                    <line x1="0" y1={-h} x2="0" y2={-h - 5} stroke="#334155" strokeWidth="1.5" />
+                    {/* Animated Candle Flame */}
+                    <g className="candle-flame-anim">
+                      <circle cx="0" cy={-h - 13} r="14" fill="#FDE047" fillOpacity="0.38" filter="url(#flame-glow)" />
+                      <path
+                        d={`M 0 ${-h - 4} Q -6 ${-h - 13} 0 ${-h - 22} Q 6 ${-h - 13} 0 ${-h - 4}`}
+                        fill="#EF4444"
+                      />
+                      <path
+                        d={`M 0 ${-h - 5} Q -3 ${-h - 12} 0 ${-h - 18} Q 3 ${-h - 12} 0 ${-h - 5}`}
+                        fill="#FCD34D"
+                      />
+                    </g>
                     {/* Distance Ruler Arrow to mirror */}
                     <line x1="0" y1="20" x2={mirrorX - objX} y2="20" stroke="#174A8B" strokeWidth="1.5" strokeDasharray="3 3" />
                     <text x={(mirrorX - objX) / 2} y="36" fill="#174A8B" fontSize="11" fontWeight="bold" textAnchor="middle">
                       s = {objectDistance} cm (Geser)
                     </text>
-                    <text x="0" y="-objectHeight-24" fill="#172B45" fontSize="11" fontWeight="bold" textAnchor="middle">
+                    <text x="0" y={-h - 28} fill="#172B45" fontSize="11" fontWeight="bold" textAnchor="middle">
                       Benda Nyata
                     </text>
                   </g>
@@ -494,19 +567,23 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                     {/* Virtual candle body (dashed border) */}
                     <rect
                       x="-8"
-                      y="-objectHeight"
+                      y={-h}
                       width="16"
-                      height={objectHeight}
-                      rx="2"
-                      fill="#FDE68A"
+                      height={h}
+                      rx="3"
+                      fill="#FEF08A"
                       stroke="#D97706"
                       strokeWidth="1.5"
                       strokeDasharray="3 3"
                     />
+                    {/* Virtual Wick */}
+                    <line x1="0" y1={-h} x2="0" y2={-h - 5} stroke="#94A3B8" strokeWidth="1.5" strokeDasharray="2 2" />
                     {/* Virtual Flame */}
                     <path
-                      d="M 0 -objectHeight Q -6 -objectHeight-12 0 -objectHeight-20 Q 6 -objectHeight-12 0 -objectHeight"
+                      d={`M 0 ${-h - 4} Q -6 ${-h - 13} 0 ${-h - 22} Q 6 ${-h - 13} 0 ${-h - 4}`}
                       fill="#F87171"
+                      stroke="#EF4444"
+                      strokeWidth="1"
                       strokeDasharray="2 2"
                     />
                     {/* Distance line */}
@@ -514,29 +591,66 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                     <text x={(mirrorX - imgX) / 2} y="36" fill="#64748B" fontSize="11" fontWeight="bold" textAnchor="middle">
                       s' = {imageDistance} cm
                     </text>
-                    <text x="0" y="-objectHeight-24" fill="#64748B" fontSize="11" fontWeight="bold" textAnchor="middle">
+                    <text x="0" y={-h - 28} fill="#64748B" fontSize="11" fontWeight="bold" textAnchor="middle">
                       Bayangan Maya
                     </text>
                   </g>
 
-                  {/* Light ray construction connecting candle tip to virtual flame */}
+                  {/* Light ray construction connecting candle tip to mirror and reflected to observer */}
                   <line
                     x1={objX}
-                    y1={objY - objectHeight - 10}
+                    y1={objY - h - 14}
                     x2={mirrorX}
-                    y2={objY - objectHeight - 10}
+                    y2={objY - h - 14}
                     stroke="#EA580C"
-                    strokeWidth="1.5"
+                    strokeWidth="2"
                   />
                   <line
                     x1={mirrorX}
-                    y1={objY - objectHeight - 10}
+                    y1={objY - h - 14}
                     x2={imgX}
-                    y2={objY - objectHeight - 10}
+                    y2={objY - h - 14}
                     stroke="#94A3B8"
-                    strokeWidth="1.5"
+                    strokeWidth="2"
                     strokeDasharray="4 4"
                   />
+
+                  {/* Ray bouncing to observer eye */}
+                  <line
+                    x1={objX}
+                    y1={objY - h - 14}
+                    x2={mirrorX}
+                    y2={hitY}
+                    stroke="#EA580C"
+                    strokeWidth="1.8"
+                  />
+                  <line
+                    x1={mirrorX}
+                    y1={hitY}
+                    x2={objX + 45}
+                    y2={hitY + 50}
+                    stroke="#2583E8"
+                    strokeWidth="2"
+                  />
+                  <line
+                    x1={mirrorX}
+                    y1={hitY}
+                    x2={imgX}
+                    y2={objY - h - 14}
+                    stroke="#94A3B8"
+                    strokeWidth="1.8"
+                    strokeDasharray="4 4"
+                  />
+
+                  {/* Observer Eye Graphic */}
+                  <g transform={`translate(${objX + 45}, ${hitY + 50})`}>
+                    <path d="M -15 0 Q 0 -9 15 0 Q 0 9 -15 0 Z" fill="#FFFFFF" stroke="#1E293B" strokeWidth="1.8" />
+                    <circle cx="2" cy="0" r="4.5" fill="#0284C7" />
+                    <circle cx="3" cy="-1" r="1.5" fill="#FFFFFF" />
+                    <text x="0" y="18" fill="#174A8B" fontSize="9" fontWeight="bold" textAnchor="middle">
+                      Mata Pengamat
+                    </text>
+                  </g>
                 </g>
               );
             })()}
@@ -548,6 +662,7 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
+                playClickSound();
                 setLabMode(labMode === "ray" ? "object" : "ray");
               }}
               className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-xs bg-[#2583E8] text-white hover:bg-[#1f6fc7] shadow-xs"
@@ -588,6 +703,66 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
           </div>
         </div>
       </div>
+
+      {/* Interactive Snell's Law Prediction Challenge */}
+      {labMode === "ray" && (
+        <div className="bg-gradient-to-r from-[#EFF6FF] via-[#F0FDF4] to-[#FFFBEB] p-4 rounded-xl border border-[#BFDBFE] shadow-2xs flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#2583E8] text-white flex items-center justify-center font-black text-sm shadow-xs">
+              ?
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-[#172B45]">Tantangan Prediksi: Hukum Pemantulan Cahaya</h4>
+              <p className="text-[11px] text-[#617187]">
+                Jika sinar laser datang dengan sudut <strong>i = {incidentAngle}°</strong>, berapakah besar sudut pantulnya?
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-[#DCE6F1]">
+              <span className="text-xs text-[#617187] font-medium">Tebakan:</span>
+              <input
+                type="number"
+                min="0"
+                max="90"
+                value={userGuess}
+                onChange={(e) => {
+                  setUserGuess(Number(e.target.value));
+                  setHasRevealed(false);
+                }}
+                className="w-14 px-1.5 py-0.5 rounded text-xs font-bold font-mono text-center text-[#172B45] focus:outline-none"
+              />
+              <span className="text-xs text-[#617187] font-bold">°</span>
+            </div>
+            <button
+              onClick={() => {
+                setHasRevealed(true);
+                if (Math.abs(userGuess - reflectedAngle) <= 1) {
+                  playSuccessChime();
+                } else {
+                  playClickSound();
+                }
+              }}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#2583E8] text-white hover:bg-[#1d6fc5] transition-all shadow-xs"
+            >
+              Uji Prediksi
+            </button>
+            {hasRevealed && (
+              <span
+                className={`text-xs font-bold px-2.5 py-1 rounded-md animate-fade-in ${
+                  Math.abs(userGuess - reflectedAngle) <= 1
+                    ? "bg-[#DCFCE7] text-[#16A34A] border border-[#86EFAC]"
+                    : "bg-[#FEF2F2] text-[#DC2626] border border-[#FECACA]"
+                }`}
+              >
+                {Math.abs(userGuess - reflectedAngle) <= 1
+                  ? "Hebat, Tepat Sekali! (Sudut Datang i = Sudut Pantul r)"
+                  : `Kurang tepat. Berdasarkan Hukum Snellius, r = ${reflectedAngle}°`}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Control Sliders & Configuration */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

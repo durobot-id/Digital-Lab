@@ -1,9 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { TOPICS } from "@/data/topics";
 import LabCard from "@/components/topic/LabCard";
+import {
+  getUserProfile,
+  getStoredProgress,
+  UserProfile
+} from "@/lib/storage";
 import {
   Flame,
   Play,
@@ -17,6 +22,23 @@ import {
 
 export default function HomePage() {
   const [activeFilter, setActiveFilter] = useState<string>("Semua");
+  const [profile, setProfile] = useState<UserProfile>(getUserProfile());
+  const [progress, setProgress] = useState(getStoredProgress());
+
+  useEffect(() => {
+    setProfile(getUserProfile());
+    setProgress(getStoredProgress());
+    const handleUpdate = () => {
+      setProfile(getUserProfile());
+      setProgress(getStoredProgress());
+    };
+    window.addEventListener("dilsa_profile_updated", handleUpdate);
+    window.addEventListener("dilsa_storage_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("dilsa_profile_updated", handleUpdate);
+      window.removeEventListener("dilsa_storage_updated", handleUpdate);
+    };
+  }, []);
 
   const filteredTopics = TOPICS.filter((t) => {
     if (activeFilter === "Semua") return true;
@@ -25,6 +47,13 @@ export default function HomePage() {
     if (activeFilter === "Optik") return t.slug === "cahaya-dan-optik";
     return true;
   });
+
+  // Calculate live completed labs
+  let completedLabsCount = 0;
+  TOPICS.forEach((t) => {
+    if (progress[t.slug]?.labCompleted) completedLabsCount++;
+  });
+  const labPercent = Math.round((completedLabsCount / TOPICS.length) * 100);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
@@ -35,7 +64,7 @@ export default function HomePage() {
             Selamat Datang Kembali
           </span>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-[#172B45] tracking-tight">
-            Halo, Raka! Siap bereksperimen?
+            Halo, {profile.name}! Siap bereksperimen?
           </h2>
           <p className="text-xs text-[#617187] mt-1">
             Temukan hal baru dan jadilah ilmuwan hebat hari ini.
@@ -43,19 +72,22 @@ export default function HomePage() {
         </div>
 
         {/* Learning Streak Pill matching screenshot */}
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-white border border-[#DCE6F1] shadow-2xs self-start sm:self-auto">
+        <Link
+          href="/profile"
+          className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-white border border-[#DCE6F1] shadow-2xs hover:bg-[#F3F8FF] transition-all self-start sm:self-auto"
+        >
           <div className="w-8 h-8 rounded-xl bg-[#FFF4C7] text-[#D97706] flex items-center justify-center">
             <Flame className="w-5 h-5 fill-[#D97706]" />
           </div>
           <div className="text-left">
             <span className="text-xs font-bold text-[#172B45] block leading-tight">
-              7 Hari
+              {profile.streakDays} Hari
             </span>
             <span className="text-[10px] text-[#617187] leading-none">
               Runtutan belajar
             </span>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* 2. Big Green/Teal Hero Banner Card matching screenshot */}
@@ -124,14 +156,14 @@ export default function HomePage() {
               Progres Belajarmu
             </h3>
             <p className="text-xs text-[#617187]">
-              Teruskan semangat belajarmu, Raka!
+              Teruskan semangat belajarmu, {profile.name}!
             </p>
           </div>
           <Link
-            href="/topics"
+            href="/laporan-belajar"
             className="text-xs font-bold text-[#174A8B] hover:text-[#2583E8] flex items-center gap-1"
           >
-            Lihat Detail
+            Lihat Laporan Lengkap
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -150,17 +182,17 @@ export default function HomePage() {
                     Eksperimen Selesai
                   </span>
                   <span className="text-base font-extrabold text-[#172B45] font-mono">
-                    2 <span className="text-xs text-[#8AA2BA]">/ 3</span>
+                    {completedLabsCount} <span className="text-xs text-[#8AA2BA]">/ {TOPICS.length}</span>
                   </span>
                 </div>
               </div>
               <span className="text-xs font-bold text-[#0284C7] bg-[#E0F2FE] px-2 py-0.5 rounded-full">
-                67%
+                {labPercent}%
               </span>
             </div>
             {/* Progress Bar */}
             <div className="w-full h-2 bg-[#F1F5F9] rounded-full overflow-hidden mt-2">
-              <div className="h-full bg-[#0284C7] rounded-full" style={{ width: "67%" }} />
+              <div className="h-full bg-[#0284C7] rounded-full transition-all duration-500" style={{ width: `${labPercent}%` }} />
             </div>
           </div>
 
@@ -173,20 +205,23 @@ export default function HomePage() {
                 </div>
                 <div>
                   <span className="text-[10px] text-[#617187] font-medium block">
-                    Lencana Kuis
+                    Lencana Terbuka
                   </span>
                   <span className="text-base font-extrabold text-[#172B45] font-mono">
-                    3 <span className="text-xs text-[#8AA2BA]">lencana</span>
+                    {profile.badges.filter(b => b.unlocked).length} <span className="text-xs text-[#8AA2BA]">/ {profile.badges.length}</span>
                   </span>
                 </div>
               </div>
               <span className="text-xs font-bold text-[#D97706] bg-[#FEF3C7] px-2 py-0.5 rounded-full">
-                +1 Baru
+                {Math.round((profile.badges.filter(b => b.unlocked).length / profile.badges.length) * 100)}%
               </span>
             </div>
             {/* Progress Bar */}
             <div className="w-full h-2 bg-[#F1F5F9] rounded-full overflow-hidden mt-2">
-              <div className="h-full bg-[#F59E0B] rounded-full" style={{ width: "85%" }} />
+              <div
+                className="h-full bg-[#F59E0B] rounded-full transition-all duration-500"
+                style={{ width: `${Math.round((profile.badges.filter(b => b.unlocked).length / profile.badges.length) * 100)}%` }}
+              />
             </div>
           </div>
 
@@ -202,17 +237,17 @@ export default function HomePage() {
                     Waktu Belajar
                   </span>
                   <span className="text-base font-extrabold text-[#172B45] font-mono">
-                    4.5 <span className="text-xs text-[#8AA2BA]">Jam</span>
+                    {profile.learningHours} <span className="text-xs text-[#8AA2BA]">Jam</span>
                   </span>
                 </div>
               </div>
               <span className="text-xs font-bold text-[#16A34A] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
-                +18%
+                {profile.streakDays} Hari Streak
               </span>
             </div>
             {/* Progress Bar */}
             <div className="w-full h-2 bg-[#F1F5F9] rounded-full overflow-hidden mt-2">
-              <div className="h-full bg-[#16A34A] rounded-full" style={{ width: "75%" }} />
+              <div className="h-full bg-[#16A34A] rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.round((profile.learningHours / 10) * 100))}%` }} />
             </div>
           </div>
         </div>

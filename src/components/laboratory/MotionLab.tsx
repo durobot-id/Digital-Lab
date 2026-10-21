@@ -17,6 +17,12 @@ import {
   ChevronUp
 } from "lucide-react";
 import { TopicData } from "@/types";
+import {
+  playClickSound,
+  playCartSound,
+  playResetSound,
+  playSuccessChime
+} from "@/lib/audio";
 
 interface MotionLabProps {
   topic: TopicData;
@@ -104,6 +110,8 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
   const reqRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number | null>(null);
 
+  const hasTriggeredSensorRef = useRef(false);
+
   const stepSimulation = useCallback(
     (dt: number) => {
       setPosition((prevPos) => {
@@ -124,7 +132,15 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
           }
           return Number(newVel.toFixed(3));
         });
-        return Number((prevPos + velocity * dt).toFixed(3));
+
+        const nextPos = Number((prevPos + velocity * dt).toFixed(3));
+        if (nextPos >= 10 && !hasTriggeredSensorRef.current && velocity > 0) {
+          hasTriggeredSensorRef.current = true;
+          playSuccessChime();
+        } else if (nextPos < 9.5) {
+          hasTriggeredSensorRef.current = false;
+        }
+        return nextPos;
       });
 
       setTime((prevT) => {
@@ -166,19 +182,23 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
   }, [isRunning, stepSimulation]);
 
   const handleReset = () => {
+    playResetSound();
     setIsRunning(false);
     setPosition(1.0);
     setVelocity(0);
     setTime(0);
     setVHistory([{ t: 0, v: 0 }]);
+    hasTriggeredSensorRef.current = false;
   };
 
   const handleManualStep = () => {
+    playClickSound();
     setIsRunning(false);
     stepSimulation(0.1);
   };
 
   const handleRecordData = () => {
+    playClickSound();
     const newEntry: DataPoint = {
       id: Date.now(),
       time: Number(time.toFixed(2)),
@@ -328,12 +348,31 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
               );
             })}
 
+            {/* Optical Photo Gate Sensor at 10m */}
+            <g transform={`translate(${40 + 10 * 58}, 85)`}>
+              <rect x="-4" y="0" width="8" height="75" fill="#334155" rx="3" />
+              <circle
+                cx="0"
+                cy="12"
+                r="5"
+                fill={position >= 10 ? "#22C55E" : "#EF4444"}
+              />
+              {position >= 10 && (
+                <circle cx="0" cy="12" r="10" fill="none" stroke="#22C55E" strokeWidth="2" className="animate-ping" />
+              )}
+              <line x1="0" y1="24" x2="0" y2="74" stroke={position >= 10 ? "#22C55E" : "#EF4444"} strokeWidth="1.5" strokeDasharray="3 3" />
+              <text x="0" y="-8" fill="#475569" fontSize="9" fontWeight="bold" textAnchor="middle">
+                Sensor 10m
+              </text>
+            </g>
+
             {/* Dynamic Cart / Block */}
             {(() => {
               const cartX = 40 + position * 58;
               const cartWidth = 60 + (mass - 1) * 2; // Size grows slightly with mass
               const cartHeight = 50;
               const cartY = 160 - cartHeight;
+              const wheelAngleNorm = Math.round(((position * 58) / 7) * (180 / Math.PI)) % 360;
 
               return (
                 <g
@@ -363,6 +402,52 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
                     window.addEventListener("pointerup", handleUp);
                   }}
                 >
+                  {/* Aerodynamic Speed Trails when moving */}
+                  {Math.abs(velocity) > 0.4 && (
+                    <g stroke="#38BDF8" strokeWidth="1.8" strokeLinecap="round" opacity="0.85">
+                      <line
+                        x1={velocity > 0 ? cartX - cartWidth / 2 - 4 : cartX + cartWidth / 2 + 4}
+                        y1={cartY + 14}
+                        x2={velocity > 0 ? cartX - cartWidth / 2 - 28 : cartX + cartWidth / 2 + 28}
+                        y2={cartY + 14}
+                        strokeDasharray="6 3"
+                      />
+                      <line
+                        x1={velocity > 0 ? cartX - cartWidth / 2 - 2 : cartX + cartWidth / 2 + 2}
+                        y1={cartY + 28}
+                        x2={velocity > 0 ? cartX - cartWidth / 2 - 38 : cartX + cartWidth / 2 + 38}
+                        y2={cartY + 28}
+                        strokeDasharray="8 4"
+                      />
+                      <line
+                        x1={velocity > 0 ? cartX - cartWidth / 2 - 6 : cartX + cartWidth / 2 + 6}
+                        y1={cartY + 40}
+                        x2={velocity > 0 ? cartX - cartWidth / 2 - 22 : cartX + cartWidth / 2 + 22}
+                        y2={cartY + 40}
+                        strokeDasharray="5 3"
+                      />
+                    </g>
+                  )}
+
+                  {/* Stacked Metallic Mass Blocks on Top of Cart */}
+                  {mass > 2 && (
+                    <g>
+                      {Array.from({ length: Math.min(5, Math.floor(mass / 3)) }).map((_, idx) => (
+                        <rect
+                          key={idx}
+                          x={cartX - 22}
+                          y={cartY - (idx + 1) * 8}
+                          width="44"
+                          height="7"
+                          rx="2"
+                          fill="#475569"
+                          stroke="#1E293B"
+                          strokeWidth="1.5"
+                        />
+                      ))}
+                    </g>
+                  )}
+
                   {/* Cart Body */}
                   <rect
                     x={cartX - cartWidth / 2}
@@ -395,9 +480,19 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
                     (Geser Balok)
                   </text>
 
-                  {/* Wheels */}
-                  <circle cx={cartX - cartWidth / 3} cy="156" r="7" fill="#334155" stroke="#FFFFFF" strokeWidth="1.5" />
-                  <circle cx={cartX + cartWidth / 3} cy="156" r="7" fill="#334155" stroke="#FFFFFF" strokeWidth="1.5" />
+                  {/* Dynamic Rotating Wheels with Spokes */}
+                  <g transform={`translate(${cartX - cartWidth / 3}, 156) rotate(${wheelAngleNorm})`}>
+                    <circle cx="0" cy="0" r="8" fill="#1E293B" stroke="#94A3B8" strokeWidth="2" />
+                    <line x1="-7" y1="0" x2="7" y2="0" stroke="#F1F5F9" strokeWidth="1.5" />
+                    <line x1="0" y1="-7" x2="0" y2="7" stroke="#F1F5F9" strokeWidth="1.5" />
+                    <circle cx="0" cy="0" r="2.5" fill="#EF4444" />
+                  </g>
+                  <g transform={`translate(${cartX + cartWidth / 3}, 156) rotate(${wheelAngleNorm})`}>
+                    <circle cx="0" cy="0" r="8" fill="#1E293B" stroke="#94A3B8" strokeWidth="2" />
+                    <line x1="-7" y1="0" x2="7" y2="0" stroke="#F1F5F9" strokeWidth="1.5" />
+                    <line x1="0" y1="-7" x2="0" y2="7" stroke="#F1F5F9" strokeWidth="1.5" />
+                    <circle cx="0" cy="0" r="2.5" fill="#EF4444" />
+                  </g>
 
                   {/* Force Vectors */}
                   {/* 1. Applied Force (F) Vector */}
@@ -501,7 +596,11 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
         <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-[#DCE6F1]">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsRunning(!isRunning)}
+              onClick={() => {
+                if (!isRunning) playCartSound();
+                else playClickSound();
+                setIsRunning(!isRunning);
+              }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-xs transition-all ${
                 isRunning
                   ? "bg-[#FFD45A] text-[#172B45] hover:bg-[#ffe082]"

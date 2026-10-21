@@ -17,6 +17,13 @@ import {
   FolderOpen
 } from "lucide-react";
 import { TopicData } from "@/types";
+import {
+  playClickSound,
+  playSwitchSound,
+  playConnectWireSound,
+  playSparkSound,
+  playSuccessChime
+} from "@/lib/audio";
 
 interface CircuitLabProps {
   topic: TopicData;
@@ -53,6 +60,8 @@ export interface Wire {
 }
 
 export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
+  const [sparkCoords, setSparkCoords] = useState<{ x: number; y: number } | null>(null);
+  const prevClosedLoopRef = useRef<boolean>(true);
   // Preset or custom components
   const [components, setComponents] = useState<PlacedComponent[]>([
     {
@@ -223,6 +232,12 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
     const current = isClosed ? Number((v / totalR).toFixed(2)) : 0;
     const power = isClosed ? Number((v * current).toFixed(2)) : 0;
 
+    if (!prevClosedLoopRef.current && isClosed && current > 0) {
+      playSuccessChime();
+      playSparkSound();
+    }
+    prevClosedLoopRef.current = isClosed && current > 0;
+
     setCircuitStats({
       isClosedLoop: isClosed,
       currentTotal: current,
@@ -298,6 +313,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
   const handlePinClick = (compId: string, termId: string) => {
     if (!activeWiringPin) {
       // First terminal selected
+      playClickSound();
       setActiveWiringPin({ compId, termId });
     } else {
       // Second terminal clicked -> create wire if from different pin
@@ -322,6 +338,10 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
           toTermId: termId
         };
         setWires((prev) => [...prev, newWire]);
+        playConnectWireSound();
+        const pinCoords = getPinCoords(termId);
+        setSparkCoords(pinCoords);
+        setTimeout(() => setSparkCoords(null), 500);
       }
       setActiveWiringPin(null);
     }
@@ -329,6 +349,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
 
   // Add Component to Workbench
   const addComponent = (type: ComponentType) => {
+    playClickSound();
     const id = `${type}-${Date.now()}`;
     let newComp: PlacedComponent;
 
@@ -408,6 +429,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
   // Remove Selected Component
   const deleteSelected = () => {
     if (!selectedCompId) return;
+    playClickSound();
     setComponents((prev) => prev.filter((c) => c.id !== selectedCompId));
     setWires((prev) =>
       prev.filter(
@@ -419,6 +441,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
 
   // Toggle Switch
   const toggleSwitch = (switchId: string) => {
+    playSwitchSound();
     setComponents((prev) =>
       prev.map((c) => (c.id === switchId ? { ...c, isClosed: !c.isClosed } : c))
     );
@@ -426,6 +449,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
 
   // Preset Loaders
   const loadPresetSeries = () => {
+    playClickSound();
     setComponents([
       {
         id: "bat-1",
@@ -485,6 +509,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
   };
 
   const loadPresetParallel = () => {
+    playClickSound();
     setComponents([
       {
         id: "bat-1",
@@ -545,6 +570,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
   };
 
   const clearCanvas = () => {
+    playClickSound();
     setComponents([]);
     setWires([]);
     setSelectedCompId(null);
@@ -681,12 +707,40 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
           >
-            {/* Dot Grid */}
+            {/* Dot Grid & Effects */}
             <defs>
               <pattern id="work-grid" width="20" height="20" patternUnits="userSpaceOnUse">
                 <circle cx="10" cy="10" r="1" fill="#CBD5E1" />
               </pattern>
+              {/* Radial glow filter for lamp */}
+              <filter id="bulb-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
             </defs>
+
+            {/* Embedded Dynamic CSS for Realistic Fluid Motion */}
+            <style>{`
+              @keyframes electronStream {
+                from { stroke-dashoffset: 40; }
+                to { stroke-dashoffset: 0; }
+              }
+              .running-electrons {
+                stroke-dasharray: 8 12;
+                animation: electronStream 0.65s linear infinite;
+              }
+              @keyframes sparkBurstAnim {
+                0% { transform: scale(0.3) rotate(0deg); opacity: 1; }
+                100% { transform: scale(1.8) rotate(45deg); opacity: 0; }
+              }
+              .spark-anim {
+                animation: sparkBurstAnim 0.45s ease-out forwards;
+              }
+            `}</style>
+
             <rect width="800" height="380" fill="url(#work-grid)" />
 
             {/* Render Wires */}
@@ -696,7 +750,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
               const midX = (start.x + end.x) / 2;
               const midY = (start.y + end.y) / 2;
 
-              // Smooth curve
+              // Smooth curved wire
               const pathD = `M ${start.x} ${start.y} Q ${midX} ${midY + (end.y - start.y) * 0.2} ${end.x} ${end.y}`;
 
               return (
@@ -706,31 +760,53 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
                     d={pathD}
                     fill="none"
                     stroke="transparent"
-                    strokeWidth="16"
-                    onClick={() => setWires((prev) => prev.filter((item) => item.id !== w.id))}
+                    strokeWidth="18"
+                    onClick={() => {
+                      playClickSound();
+                      setWires((prev) => prev.filter((item) => item.id !== w.id));
+                    }}
                   />
-                  {/* Wire core */}
+                  {/* Wire core shadow / outer casing */}
                   <path
                     d={pathD}
                     fill="none"
-                    stroke={circuitStats.isClosedLoop ? "#2583E8" : "#94A3B8"}
-                    strokeWidth="4"
+                    stroke={circuitStats.isClosedLoop ? "#1D4ED8" : "#94A3B8"}
+                    strokeWidth="5"
                     strokeLinecap="round"
                   />
-                  {/* Animated electron current if closed */}
+                  {/* Inner Wire Core */}
+                  <path
+                    d={pathD}
+                    fill="none"
+                    stroke={circuitStats.isClosedLoop ? "#60A5FA" : "#CBD5E1"}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                  {/* Dynamic Running Electron Flow when closed circuit */}
                   {circuitStats.isClosedLoop && circuitStats.currentTotal > 0 && (
                     <path
                       d={pathD}
                       fill="none"
-                      stroke="#FFD45A"
-                      strokeWidth="2.5"
-                      strokeDasharray="6 12"
-                      className="animate-pulse"
+                      stroke="#FDE047"
+                      strokeWidth="3"
+                      className="running-electrons"
+                      strokeLinecap="round"
                     />
                   )}
                 </g>
               );
             })}
+
+            {/* Spark Effect Burst upon wire connection */}
+            {sparkCoords && (
+              <g transform={`translate(${sparkCoords.x}, ${sparkCoords.y})`} className="spark-anim pointer-events-none">
+                <circle cx="0" cy="0" r="10" fill="#FFD45A" opacity="0.9" />
+                <line x1="-16" y1="0" x2="16" y2="0" stroke="#FFFFFF" strokeWidth="2.5" />
+                <line x1="0" y1="-16" x2="0" y2="16" stroke="#FFFFFF" strokeWidth="2.5" />
+                <line x1="-12" y1="-12" x2="12" y2="12" stroke="#F59E0B" strokeWidth="2" />
+                <line x1="-12" y1="12" x2="12" y2="-12" stroke="#F59E0B" strokeWidth="2" />
+              </g>
+            )}
 
             {/* Render Placed Components */}
             {components.map((c) => {
@@ -750,11 +826,11 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
                       y="-45"
                       width="110"
                       height="90"
-                      rx="12"
+                      rx="14"
                       fill="#DDF0FF"
-                      fillOpacity="0.3"
+                      fillOpacity="0.35"
                       stroke="#2583E8"
-                      strokeWidth="1.5"
+                      strokeWidth="2"
                       strokeDasharray="4 4"
                     />
                   )}
@@ -764,7 +840,14 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
                     <g>
                       <rect x="-40" y="-25" width="80" height="50" rx="8" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
                       <rect x="-10" y="-32" width="20" height="8" rx="2" fill="#F59E0B" />
-                      <text x="0" y="5" fill="#FFFFFF" fontSize="12" fontWeight="bold" textAnchor="middle">
+                      {/* Polarity markers */}
+                      <text x="24" y="-12" fill="#EF4444" fontSize="12" fontWeight="extrabold" textAnchor="middle">
+                        +
+                      </text>
+                      <text x="-24" y="-12" fill="#60A5FA" fontSize="14" fontWeight="extrabold" textAnchor="middle">
+                        -
+                      </text>
+                      <text x="0" y="7" fill="#FFFFFF" fontSize="12" fontWeight="bold" textAnchor="middle">
                         {c.voltage}V
                       </text>
                       <text x="0" y="38" fill="#174A8B" fontSize="10" fontWeight="bold" textAnchor="middle">
@@ -776,28 +859,47 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
                   {/* LAMP BULB COMPONENT */}
                   {c.type === "lamp" && (
                     <g>
-                      {/* Glow if current flowing */}
-                      {circuitStats.isClosedLoop && (
-                        <circle cx="0" cy="-10" r="42" fill="#FEF08A" fillOpacity="0.45" />
+                      {/* Dynamic Radiant Halo & Beams if current flowing */}
+                      {circuitStats.isClosedLoop && circuitStats.currentTotal > 0 && (
+                        <g>
+                          <circle cx="0" cy="-10" r="50" fill="#FDE047" fillOpacity="0.32" filter="url(#bulb-glow)" className="animate-pulse" />
+                          <circle cx="0" cy="-10" r="34" fill="#FEF08A" fillOpacity="0.5" />
+                          {/* Light Rays */}
+                          {[-45, -90, -135, 45, 90, 135].map((deg) => (
+                            <line
+                              key={deg}
+                              x1={35 * Math.cos((deg * Math.PI) / 180)}
+                              y1={-10 + 35 * Math.sin((deg * Math.PI) / 180)}
+                              x2={48 * Math.cos((deg * Math.PI) / 180)}
+                              y2={-10 + 48 * Math.sin((deg * Math.PI) / 180)}
+                              stroke="#F59E0B"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              opacity="0.85"
+                            />
+                          ))}
+                        </g>
                       )}
-                      {/* Glass bulb */}
+                      {/* Glass bulb shell */}
                       <circle
                         cx="0"
                         cy="-10"
                         r="24"
-                        fill={circuitStats.isClosedLoop ? "#FEF08A" : "#FFFFFF"}
-                        stroke="#475569"
-                        strokeWidth="2"
+                        fill={circuitStats.isClosedLoop && circuitStats.currentTotal > 0 ? "#FFFBEB" : "#F8FAFC"}
+                        stroke={circuitStats.isClosedLoop && circuitStats.currentTotal > 0 ? "#F59E0B" : "#475569"}
+                        strokeWidth="2.5"
                       />
-                      {/* Filament */}
+                      {/* Tungsten Filament */}
                       <path
                         d="M -7 5 L -4 -10 L 0 -4 L 4 -10 L 7 5"
                         fill="none"
-                        stroke={circuitStats.isClosedLoop ? "#EA580C" : "#94A3B8"}
-                        strokeWidth="2"
+                        stroke={circuitStats.isClosedLoop && circuitStats.currentTotal > 0 ? "#DC2626" : "#94A3B8"}
+                        strokeWidth={circuitStats.isClosedLoop && circuitStats.currentTotal > 0 ? "2.5" : "2"}
                       />
-                      {/* Socket */}
-                      <rect x="-12" y="5" width="24" height="15" rx="2" fill="#64748B" />
+                      {/* Lamp base screw & contact */}
+                      <rect x="-12" y="5" width="24" height="15" rx="3" fill="#64748B" stroke="#475569" strokeWidth="1" />
+                      <line x1="-12" y1="10" x2="12" y2="10" stroke="#94A3B8" strokeWidth="1" />
+                      <line x1="-12" y1="14" x2="12" y2="14" stroke="#94A3B8" strokeWidth="1" />
                       <text x="0" y="34" fill="#172B45" fontSize="10" fontWeight="bold" textAnchor="middle">
                         {c.label}
                       </text>
@@ -806,18 +908,47 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
 
                   {/* SWITCH COMPONENT */}
                   {c.type === "switch" && (
-                    <g onClick={() => toggleSwitch(c.id)} className="cursor-pointer">
-                      <rect x="-45" y="-18" width="90" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1.5" />
-                      <circle cx="-25" cy="0" r="4" fill="#334155" />
-                      <circle cx="25" cy="0" r="4" fill="#334155" />
-                      {/* Switch Lever */}
-                      {c.isClosed ? (
-                        <line x1="-25" y1="0" x2="25" y2="0" stroke="#23845B" strokeWidth="4" strokeLinecap="round" />
-                      ) : (
-                        <line x1="-25" y1="0" x2="15" y2="-22" stroke="#C43D4B" strokeWidth="4" strokeLinecap="round" />
-                      )}
-                      <text x="0" y="32" fill="#64748B" fontSize="10" fontWeight="bold" textAnchor="middle">
-                        {c.isClosed ? "Sakelar ON" : "Sakelar OFF"}
+                    <g onClick={() => toggleSwitch(c.id)} className="cursor-pointer group">
+                      <rect
+                        x="-45"
+                        y="-18"
+                        width="90"
+                        height="36"
+                        rx="8"
+                        fill={c.isClosed ? "#F0FDF4" : "#FEF2F2"}
+                        stroke={c.isClosed ? "#22C55E" : "#F87171"}
+                        strokeWidth="2"
+                      />
+                      {/* Terminal studs */}
+                      <circle cx="-25" cy="0" r="5" fill="#1E293B" stroke="#64748B" strokeWidth="1.5" />
+                      <circle cx="25" cy="0" r="5" fill="#1E293B" stroke="#64748B" strokeWidth="1.5" />
+                      {/* Lever Arm */}
+                      <line
+                        x1="-25"
+                        y1="0"
+                        x2={c.isClosed ? 25 : 15}
+                        y2={c.isClosed ? 0 : -24}
+                        stroke={c.isClosed ? "#16A34A" : "#DC2626"}
+                        strokeWidth="5"
+                        strokeLinecap="round"
+                        className="transition-all duration-200"
+                      />
+                      <circle
+                        cx={c.isClosed ? 25 : 15}
+                        cy={c.isClosed ? 0 : -24}
+                        r="4"
+                        fill={c.isClosed ? "#15803D" : "#B91C1C"}
+                        className="transition-all duration-200"
+                      />
+                      <text
+                        x="0"
+                        y="32"
+                        fill={c.isClosed ? "#15803D" : "#B91C1C"}
+                        fontSize="10"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                      >
+                        {c.isClosed ? "Sakelar ON (Klik)" : "Sakelar OFF (Klik)"}
                       </text>
                     </g>
                   )}
@@ -825,10 +956,12 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
                   {/* RESISTOR COMPONENT */}
                   {c.type === "resistor" && (
                     <g>
-                      <rect x="-35" y="-15" width="70" height="30" rx="4" fill="#F1F5F9" stroke="#64748B" strokeWidth="2" />
-                      <line x1="-20" y1="-15" x2="-20" y2="15" stroke="#EA580C" strokeWidth="3" />
-                      <line x1="-5" y1="-15" x2="-5" y2="15" stroke="#3B82F6" strokeWidth="3" />
-                      <line x1="10" y1="-15" x2="10" y2="15" stroke="#10B981" strokeWidth="3" />
+                      <rect x="-35" y="-15" width="70" height="30" rx="6" fill="#F8FAFC" stroke="#64748B" strokeWidth="2" />
+                      {/* Color code bands */}
+                      <line x1="-20" y1="-15" x2="-20" y2="15" stroke="#EA580C" strokeWidth="4" />
+                      <line x1="-5" y1="-15" x2="-5" y2="15" stroke="#3B82F6" strokeWidth="4" />
+                      <line x1="10" y1="-15" x2="10" y2="15" stroke="#10B981" strokeWidth="4" />
+                      <line x1="22" y1="-15" x2="22" y2="15" stroke="#F59E0B" strokeWidth="3" />
                       <text x="0" y="32" fill="#172B45" fontSize="10" fontWeight="bold" textAnchor="middle">
                         {c.label}
                       </text>

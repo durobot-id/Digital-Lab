@@ -55,21 +55,21 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     },
     {
       name: "Laporan Belajar",
-      href: "/topics",
+      href: "/laporan-belajar",
       icon: BarChart3,
-      isActive: false
+      isActive: pathname === "/laporan-belajar"
     }
   ];
 
   const secondaryMenuItems = [
     {
       name: "Pengaturan",
-      href: "#",
+      href: "/pengaturan",
       icon: Settings
     },
     {
       name: "Pusat Bantuan",
-      href: "#",
+      href: "/pusat-bantuan",
       icon: HelpCircle
     }
   ];
