@@ -57,7 +57,7 @@ export default function LabCard({ topic, colorScheme }: LabCardProps) {
 
   return (
     <Link
-      href={`/topics/${topic.slug}/lab`}
+      href={`/topics/${topic.slug}`}
       className="bg-white rounded-3xl border border-[#DCE6F1] shadow-2xs hover:shadow-md transition-all overflow-hidden flex flex-col group"
     >
       {/* Top Pastel Illustration Container matching screenshot */}

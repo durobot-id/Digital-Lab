@@ -82,7 +82,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
       x: 340,
       y: 70,
       label: "Sakelar",
-      isClosed: true,
+      isClosed: false,
       terminals: [
         { id: "sw-1-t1", label: "A", relX: -40, relY: 0 },
         { id: "sw-1-t2", label: "B", relX: 40, relY: 0 }
@@ -102,30 +102,10 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
     }
   ]);
 
-  // Initial wires forming a complete loop
-  const [wires, setWires] = useState<Wire[]>([
-    {
-      id: "w-1",
-      fromCompId: "bat-1",
-      fromTermId: "bat-1-pos",
-      toCompId: "sw-1",
-      toTermId: "sw-1-t1"
-    },
-    {
-      id: "w-2",
-      fromCompId: "sw-1",
-      fromTermId: "sw-1-t2",
-      toCompId: "lamp-1",
-      toTermId: "lamp-1-t1"
-    },
-    {
-      id: "w-3",
-      fromCompId: "lamp-1",
-      fromTermId: "lamp-1-t2",
-      toCompId: "bat-1",
-      toTermId: "bat-1-neg"
-    }
-  ]);
+  // Initial wires empty so user connects them manually
+  const [wires, setWires] = useState<Wire[]>([]);
+  const [conductingCompIds, setConductingCompIds] = useState<Set<string>>(new Set());
+  const [conductingWireIds, setConductingWireIds] = useState<Set<string>>(new Set());
 
   const [selectedCompId, setSelectedCompId] = useState<string | null>("bat-1");
   const [activeWiringPin, setActiveWiringPin] = useState<{
@@ -140,17 +120,19 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
 
   // Simulation output
   const [circuitStats, setCircuitStats] = useState({
-    isClosedLoop: true,
-    currentTotal: 1.2,
-    voltageSource: 12,
-    resistanceTotal: 10,
-    powerTotal: 14.4
+    isClosedLoop: false,
+    currentTotal: 0,
+    voltageSource: 0,
+    resistanceTotal: 0,
+    powerTotal: 0
   });
 
-  // Calculate Circuit Loop State
+  // Calculate Circuit Loop State & Active Conducting Elements
   useEffect(() => {
     const battery = components.find((c) => c.type === "battery");
     if (!battery) {
+      setConductingCompIds(new Set());
+      setConductingWireIds(new Set());
       setCircuitStats({
         isClosedLoop: false,
         currentTotal: 0,
@@ -164,73 +146,133 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
     const posPinId = `${battery.id}-pos`;
     const negPinId = `${battery.id}-neg`;
 
-    // Build adjacency graph between component terminals
+    // 1. Build adjacency graph between component terminals
     const adj: Record<string, string[]> = {};
+    const addEdge = (u: string, v: string) => {
+      if (!adj[u]) adj[u] = [];
+      if (!adj[v]) adj[v] = [];
+      adj[u].push(v);
+      adj[v].push(u);
+    };
+
+    // Wires create edges between terminals
     wires.forEach((w) => {
-      if (!adj[w.fromTermId]) adj[w.fromTermId] = [];
-      if (!adj[w.toTermId]) adj[w.toTermId] = [];
-      adj[w.fromTermId].push(w.toTermId);
-      adj[w.toTermId].push(w.fromTermId);
+      addEdge(w.fromTermId, w.toTermId);
     });
 
     // Internal component continuity
     components.forEach((c) => {
       if (c.type === "switch") {
         if (c.isClosed) {
+          addEdge(`${c.id}-t1`, `${c.id}-t2`);
+        }
+      } else if (c.type === "lamp" || c.type === "resistor" || c.type === "ammeter") {
+        addEdge(`${c.id}-t1`, `${c.id}-t2`);
+      }
+    });
+
+    // Reachability helper with optional edge skip
+    const canReach = (
+      start: string,
+      target: string,
+      skipEdge?: { u: string; v: string }
+    ): boolean => {
+      if (start === target) return true;
+      const visited = new Set<string>([start]);
+      const queue: string[] = [start];
+      while (queue.length > 0) {
+        const curr = queue.shift()!;
+        if (curr === target) return true;
+        for (const next of adj[curr] || []) {
+          if (skipEdge) {
+            if (
+              (curr === skipEdge.u && next === skipEdge.v) ||
+              (curr === skipEdge.v && next === skipEdge.u)
+            ) {
+              continue;
+            }
+          }
+          if (!visited.has(next)) {
+            visited.add(next);
+            queue.push(next);
+          }
+        }
+      }
+      return false;
+    };
+
+    // 2. Check if circuit is a closed loop between battery positive and negative
+    const isClosed = canReach(posPinId, negPinId);
+
+    if (!isClosed) {
+      setConductingCompIds(new Set());
+      setConductingWireIds(new Set());
+      setCircuitStats({
+        isClosedLoop: false,
+        currentTotal: 0,
+        voltageSource: battery.voltage || 12,
+        resistanceTotal: 0,
+        powerTotal: 0
+      });
+      prevClosedLoopRef.current = false;
+      return;
+    }
+
+    // 3. Circuit is closed! Now verify which EXACT components and wires carry current
+    const activeComps = new Set<string>();
+    activeComps.add(battery.id);
+
+    components.forEach((c) => {
+      if (c.type === "switch") {
+        if (c.isClosed) {
           const t1 = `${c.id}-t1`;
           const t2 = `${c.id}-t2`;
-          if (!adj[t1]) adj[t1] = [];
-          if (!adj[t2]) adj[t2] = [];
-          adj[t1].push(t2);
-          adj[t2].push(t1);
+          const skip = { u: t1, v: t2 };
+          if (
+            (canReach(posPinId, t1, skip) && canReach(negPinId, t2, skip)) ||
+            (canReach(posPinId, t2, skip) && canReach(negPinId, t1, skip))
+          ) {
+            activeComps.add(c.id);
+          }
         }
       } else if (c.type === "lamp" || c.type === "resistor" || c.type === "ammeter") {
         const t1 = `${c.id}-t1`;
         const t2 = `${c.id}-t2`;
-        if (!adj[t1]) adj[t1] = [];
-        if (!adj[t2]) adj[t2] = [];
-        adj[t1].push(t2);
-        adj[t2].push(t1);
+        const skip = { u: t1, v: t2 };
+        if (
+          (canReach(posPinId, t1, skip) && canReach(negPinId, t2, skip)) ||
+          (canReach(posPinId, t2, skip) && canReach(negPinId, t1, skip))
+        ) {
+          activeComps.add(c.id);
+        }
       }
     });
 
-    // BFS from battery positive to battery negative
-    const visited = new Set<string>();
-    const queue: string[] = [posPinId];
-    visited.add(posPinId);
-    let reachedNegative = false;
-
-    while (queue.length > 0) {
-      const curr = queue.shift()!;
-      if (curr === negPinId) {
-        reachedNegative = true;
-        break;
+    const activeWires = new Set<string>();
+    wires.forEach((w) => {
+      const skip = { u: w.fromTermId, v: w.toTermId };
+      if (
+        (canReach(posPinId, w.fromTermId, skip) && canReach(negPinId, w.toTermId, skip)) ||
+        (canReach(posPinId, w.toTermId, skip) && canReach(negPinId, w.fromTermId, skip))
+      ) {
+        activeWires.add(w.id);
       }
-      for (const neighbor of adj[curr] || []) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          queue.push(neighbor);
-        }
-      }
-    }
+    });
 
-    // Calculate resistances of visited components
+    // 4. Calculate total resistance of ONLY actively conducting components
     let totalR = 0;
     components.forEach((c) => {
-      if (c.type === "lamp" || c.type === "resistor") {
-        const t1 = `${c.id}-t1`;
-        const t2 = `${c.id}-t2`;
-        if (visited.has(t1) && visited.has(t2)) {
+      if (activeComps.has(c.id)) {
+        if (c.type === "lamp" || c.type === "resistor") {
           totalR += c.resistance || 10;
         }
       }
     });
 
-    if (totalR === 0) totalR = 0.5; // Wire safety resistance to prevent divide by zero
+    if (totalR === 0) totalR = 0.5; // Wire safety internal resistance to prevent division by zero
     const v = battery.voltage || 12;
-    const isClosed = reachedNegative;
-    const current = isClosed ? Number((v / totalR).toFixed(2)) : 0;
-    const power = isClosed ? Number((v * current).toFixed(2)) : 0;
+    const current = Number((v / totalR).toFixed(2));
+    const power = Number((v * current).toFixed(2));
 
     if (!prevClosedLoopRef.current && isClosed && current > 0) {
       playSuccessChime();
@@ -238,6 +280,8 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
     }
     prevClosedLoopRef.current = isClosed && current > 0;
 
+    setConductingCompIds(activeComps);
+    setConductingWireIds(activeWires);
     setCircuitStats({
       isClosedLoop: isClosed,
       currentTotal: current,
@@ -389,7 +433,7 @@ export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
         x: spawnX,
         y: spawnY,
         label: "Sakelar",
-        isClosed: true,
+        isClosed: false,
         terminals: [
           { id: `${id}-t1`, label: "A", relX: -40, relY: 0 },
           { id: `${id}-t2`, label: "B", relX: 40, relY: 0 }
