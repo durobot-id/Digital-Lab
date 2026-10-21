@@ -7,11 +7,11 @@ import {
   Activity,
   Zap,
   Sun,
-  Clock,
-  GraduationCap,
-  ArrowRight,
-  CheckCircle2,
-  Award
+  FlaskConical,
+  BookOpen,
+  HelpCircle,
+  Award,
+  ArrowRight
 } from "lucide-react";
 import { getTopicProgress } from "@/lib/storage";
 
@@ -29,87 +29,110 @@ export default function TopicCard({ topic }: TopicCardProps) {
     setProgress(getTopicProgress(topic.slug));
   }, [topic.slug]);
 
-  // Icon mapping
-  const renderIcon = () => {
+  // Large visual icon and theme gradient
+  const renderVisual = () => {
     switch (topic.iconName) {
       case "Activity":
-        return <Activity className="w-6 h-6 text-[#2583E8]" />;
+        return {
+          icon: <Activity className="w-12 h-12 text-[#2583E8]" />,
+          bg: "bg-gradient-to-br from-[#DDF0FF] to-[#E0F2FE]",
+          formula: "F = m × a",
+          tag: "Mekanika Gerak"
+        };
       case "Zap":
-        return <Zap className="w-6 h-6 text-[#FFD45A]" />;
+        return {
+          icon: <Zap className="w-12 h-12 text-[#F59E0B]" />,
+          bg: "bg-gradient-to-br from-[#FEF3C7] to-[#FFFBEB]",
+          formula: "V = I × R",
+          tag: "Rangkaian DC"
+        };
       case "Sun":
-        return <Sun className="w-6 h-6 text-[#2583E8]" />;
+        return {
+          icon: <Sun className="w-12 h-12 text-[#0284C7]" />,
+          bg: "bg-gradient-to-br from-[#E0F2FE] to-[#F0F9FF]",
+          formula: "sudut i = sudut r",
+          tag: "Optika Cermin"
+        };
       default:
-        return <Activity className="w-6 h-6 text-[#2583E8]" />;
+        return {
+          icon: <Activity className="w-12 h-12 text-[#2583E8]" />,
+          bg: "bg-[#F3F8FF]",
+          formula: "F = m × a",
+          tag: "Fisika IPA"
+        };
     }
   };
 
+  const visual = renderVisual();
+
   return (
-    <div className="bg-white rounded-2xl border border-[#DCE6F1] shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group">
-      <div className="p-6">
-        {/* Top Badges */}
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <span className="text-[11px] font-bold px-2.5 py-1 rounded-md bg-[#DDF0FF] text-[#174A8B]">
-            {topic.badge}
+    <div className="bg-white rounded-3xl border border-[#DCE6F1] shadow-xs hover:shadow-lg transition-all flex flex-col justify-between overflow-hidden group">
+      <div className="p-6 sm:p-7 flex flex-col items-center text-center">
+        {/* Large Visual Icon */}
+        <div
+          className={`w-24 h-24 rounded-3xl ${visual.bg} border border-[#DCE6F1] flex items-center justify-center mb-5 group-hover:scale-110 transition-transform shadow-xs`}
+        >
+          {visual.icon}
+        </div>
+
+        {/* Badges */}
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#DDF0FF] text-[#174A8B]">
+            {visual.tag}
           </span>
-          <div className="flex items-center gap-1.5 text-xs text-[#617187]">
-            <Clock className="w-3.5 h-3.5" />
-            <span>{topic.durationMinutes} menit</span>
-          </div>
+          <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#F1F5F9] text-[#475569]">
+            {visual.formula}
+          </span>
         </div>
 
-        {/* Title and Icon */}
-        <div className="flex items-start gap-4 mb-3">
-          <div className="w-12 h-12 rounded-xl bg-[#F3F8FF] border border-[#DCE6F1] flex items-center justify-center shrink-0 group-hover:bg-[#DDF0FF] transition-all">
-            {renderIcon()}
-          </div>
-          <div>
-            <span className="text-[11px] font-semibold text-[#617187] flex items-center gap-1 mb-1">
-              <GraduationCap className="w-3.5 h-3.5" />
-              {topic.gradeLevel}
-            </span>
-            <h3 className="font-bold text-base text-[#172B45] group-hover:text-[#2583E8] transition-colors leading-snug">
-              {topic.title}
-            </h3>
-          </div>
-        </div>
+        {/* Title */}
+        <h3 className="font-extrabold text-lg text-[#172B45] group-hover:text-[#2583E8] transition-colors mb-2 leading-snug">
+          {topic.title}
+        </h3>
 
-        {/* Summary Description */}
-        <p className="text-xs text-[#617187] leading-relaxed mb-4 line-clamp-3">
-          {topic.summary}
+        {/* Concise Single-Line Goal */}
+        <p className="text-xs text-[#617187] line-clamp-2 max-w-xs mb-4">
+          {topic.labConfig.goal}
         </p>
 
-        {/* Learning Objectives Preview */}
-        <div className="space-y-1.5 pt-3 border-t border-[#DCE6F1]">
-          <span className="text-[11px] font-bold text-[#174A8B] uppercase tracking-wider block mb-1">
-            Fokus Utama:
-          </span>
-          {topic.learningObjectives.slice(0, 2).map((obj, i) => (
-            <div key={i} className="flex items-start gap-2 text-[11px] text-[#617187]">
-              <CheckCircle2 className="w-3 h-3 text-[#23845B] shrink-0 mt-0.5" />
-              <span className="line-clamp-1">{obj}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Card Footer & Action */}
-      <div className="px-6 py-4 bg-[#F8FAFC] border-t border-[#DCE6F1] flex items-center justify-between">
-        {progress.quizPercentage !== undefined ? (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#23845B]">
+        {/* Evaluation status if available */}
+        {progress.quizPercentage !== undefined && (
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#23845B] bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 mb-2">
             <Award className="w-4 h-4" />
             <span>Skor Kuis: {progress.quizPercentage}%</span>
           </div>
-        ) : (
-          <span className="text-xs text-[#617187] font-medium">Belum dievaluasi</span>
         )}
+      </div>
 
+      {/* Card Action Buttons */}
+      <div className="p-5 pt-0 flex flex-col gap-2">
+        {/* Main CTA: Direct Lab */}
         <Link
-          href={`/topics/${topic.slug}`}
-          className="flex items-center gap-1 text-xs font-bold text-[#2583E8] group-hover:translate-x-1 transition-all"
+          href={`/topics/${topic.slug}/lab`}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-xs text-white bg-[#2583E8] hover:bg-[#1f6fc7] shadow-xs hover:shadow-md transition-all group-hover:bg-[#174A8B]"
         >
-          Mulai Belajar
-          <ArrowRight className="w-3.5 h-3.5" />
+          <FlaskConical className="w-4 h-4" />
+          Masuk ke Laboratorium 2D
+          <ArrowRight className="w-4 h-4" />
         </Link>
+
+        {/* Secondary Actions */}
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            href={`/topics/${topic.slug}`}
+            className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold text-[#617187] hover:text-[#174A8B] bg-[#F8FAFC] hover:bg-[#F3F8FF] border border-[#DCE6F1] transition-all"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#2583E8]" />
+            Materi
+          </Link>
+          <Link
+            href={`/topics/${topic.slug}/quiz`}
+            className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold text-[#617187] hover:text-[#174A8B] bg-[#F8FAFC] hover:bg-[#F3F8FF] border border-[#DCE6F1] transition-all"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-[#23845B]" />
+            Kuis
+          </Link>
+        </div>
       </div>
     </div>
   );

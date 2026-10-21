@@ -29,22 +29,22 @@ function generateHeuristicResponse(
       
 Menghasilkan percepatan a = F / m = ${fNet} N / ${m} kg = ${a} m/s². 
 
-Perhatikan bahwa jika kamu memperbesar gaya dorong, percepatan balok akan meningkat searah gaya. Coba prediksi: menurutmu apa yang terjadi jika massanya kita gandakan menjadi ${m * 2} kg?`;
+Perhatikan bahwa jika kamu memperbesar gaya dorong, percepatan balok akan meningkat searah gaya. Coba amati apa yang terjadi jika massanya kita gandakan menjadi ${m * 2} kg!`;
     }
 
     if (query.includes("petunjuk") || query.includes("langkah") || query.includes("berikutnya")) {
       if (activeStep === 1) {
-        return `Untuk Langkah 1 (Pengaruh Besar Gaya): Pertahankan massa tetap (misal 2 kg), lalu variasikan gaya dorong dari 10 N ke 20 N dan 30 N. Catat nilai percepatannya pada tombol 'Catat Titik Data'. Apakah percepatannya naik 2 kali lipat saat gayanya diduakan?`;
+        return `Untuk Langkah 1: Pertahankan massa tetap (misal 2 kg), lalu variasikan gaya dorong dari 10 N ke 20 N dan 30 N. Catat nilai percepatannya. Apakah percepatannya berlipat ganda?`;
       }
       if (activeStep === 2) {
-        return `Untuk Langkah 2 (Pengaruh Massa): Kunci gaya dorong di angka 20 N, lalu geser slider massa dari 2 kg ke 4 kg hingga 8 kg. Amati bagaimana benda yang lebih berat terasa lebih lambat menambah kecepatannya (inersia bertambah).`;
+        return `Untuk Langkah 2: Kunci gaya dorong di angka 20 N, lalu geser massa dari 2 kg ke 4 kg hingga 8 kg. Amati bagaimana benda yang lebih berat terasa lebih lambat menambah kecepatannya (inersia bertambah).`;
       }
-      return `Untuk Langkah 3 (Uji Gesekan): Coba aktifkan mode 'Gesekan Rendah' atau 'Gesekan Kasar'. Perhatikan panah merah gaya gesek yang selalu melawan arah gerak dan mengurangi percepatan neto benda!`;
+      return `Untuk Langkah 3: Coba aktifkan mode 'Gesekan Rendah' atau 'Gesekan Kasar'. Perhatikan panah merah gaya gesek yang selalu melawan arah gerak dan mengurangi percepatan neto benda!`;
     }
 
     return `Saat ini balok bermassa ${m} kg didorong dengan gaya ${f} N, menghasilkan percepatan ${a} m/s². 
 
-Ingat rumusnya: a = F_net / m. Apa yang ingin kamu uji selanjutnya? Kamu bisa mencoba menaikkan massa atau mengubah permukaan menjadi bergesekan!`;
+Ingat rumusnya: a = F_net / m. Kamu bisa mencoba menggeser balok atau mengubah gaya gesek lintasan!`;
   }
 
   if (topic === "kelistrikan") {
@@ -55,24 +55,19 @@ Ingat rumusnya: a = F_net / m. Apa yang ingin kamu uji selanjutnya? Kamu bisa me
     const status = params.statusSakelar ?? "Tertutup";
 
     if (query.includes("jelaskan") || query.includes("hasil") || query.includes("mengapa")) {
-      if (status.includes("Terbuka")) {
-        return `Sakelar saat ini dalam keadaan terbuka! Dalam keadaan ini, rangkaian listrik terputus sehingga tidak ada muatan yang dapat bersirkulasi (kuat arus I = 0 A). Lampu tidak dapat menyala tanpa lintasan sirkuit yang tertutup.`;
+      if (status.includes("Terbuka") || i === 0) {
+        return `Rangkaian saat ini terbuka atau kabel belum terhubung membentuk sirkuit tertutup. Arus listrik bernilai 0 Ampere. Muatan hanya dapat mengalir jika kutub positif baterai tersambung melalui komponen kembali ke kutub negatif.`;
       }
-      return `Rangkaian ${type} sedang dialiri arus dari sumber ${v} Volt. Hambatan total rangkaian yang terukur adalah ${rTot} Ω. 
+      return `Rangkaian ${type} sedang dialiri arus dari baterai ${v} Volt. Hambatan total adalah ${rTot} Ω. 
 
-Berdasarkan Hukum Ohm (I = V / R), kuat arus yang mengalir adalah I = ${v}V / ${rTot}Ω = ${i} Ampere. 
-${
-  type === "parallel"
-    ? "Pada susunan paralel, kedua lampu mendapatkan tegangan penuh baterai sehingga menyala lebih benderang dibanding jika dipasang seri!"
-    : "Pada susunan seri, tegangan terbagi di antara lampu-lampu sehingga nyalanya lebih redup."
-}`;
+Berdasarkan Hukum Ohm (I = V / R), arus yang mengalir adalah I = ${v}V / ${rTot}Ω = ${i} Ampere. Lampu menyala sesuai daya yang diserapnya!`;
     }
 
-    if (query.includes("petunjuk") || query.includes("langkah")) {
-      return `Coba bandingkan rangkaian Seri dan Paralel dengan nilai lampu yang sama (${params.hambatanLampu1_Ohm ?? 10} Ω). Perhatikan bagaimana nilai kuat arus total pada ammeter melonjak jauh lebih tinggi ketika dipasang paralel karena hambatan totalnya mengecil!`;
+    if (query.includes("petunjuk") || query.includes("sambung") || query.includes("kabel")) {
+      return `Untuk menghubungkan komponen: Klik salah satu terminal pin komponen (titik merah/biru), lalu klik terminal komponen lain untuk menyambungkan kabel. Pastikan baterai, sakelar, dan lampu membentuk lingkaran tertutup!`;
     }
 
-    return `Pada rangkaian ${type} ini, tegangan sumber adalah ${v} V dan arus yang mengalir adalah ${i} A. Sakelar dalam status ${status}. Ada konsep atau percobaan kelistrikan yang ingin kita bedah bersama?`;
+    return `Pada rangkaian ini, tegangan sumber adalah ${v} V dan arus adalah ${i} A. Status sakelar: ${status}. Silakan coba sambungkan kabel atau atur komponen di meja kerja!`;
   }
 
   if (topic === "cahaya-dan-optik") {
@@ -81,22 +76,19 @@ ${
     const s = params.jarakBenda_cm ?? 20;
 
     if (query.includes("jelaskan") || query.includes("hasil") || query.includes("hukum")) {
-      return `Hukum Pemantulan Cahaya menyatakan bahwa sudut datang (i) selalu sama persis dengan sudut pantul (r) jika diukur terhadap garis normal yang tegak lurus cermin. 
+      return `Hukum Pemantulan Cahaya menyatakan bahwa sudut datang (i) selalu sama dengan sudut pantul (r) diukur terhadap garis normal. 
 
-Saat ini sudut datang laser adalah ${iAngle}°, sehingga sudut pantulnya pasti ${rAngle}°. 
-Perhatikan garis normal titik-titik di tengah: kedua sudut diukur mengapit garis normal tersebut, bukan dari permukaan kaca cermin!`;
+Sudut datang laser adalah ${iAngle}°, sehingga sudut pantulnya adalah ${rAngle}°.`;
     }
 
     if (query.includes("bayangan") || query.includes("maya") || query.includes("jarak")) {
-      return `Pada cermin datar, jarak bayangan di belakang cermin (s' = ${s} cm) selalu sama persis dengan jarak benda di depan cermin (s = ${s} cm). 
-
-Bayangan ini bersifat MAYA (virtual) karena dibentuk dari perpanjangan garis khayal sinar di balik cermin, TEGAK, dan SAMA BESAR dengan benda aslinya.`;
+      return `Pada cermin datar, jarak bayangan di belakang cermin (s' = ${s} cm) selalu sama persis dengan jarak benda (s = ${s} cm). Bayangan ini bersifat maya, tegak, dan sama besar.`;
     }
 
-    return `Eksperimen optik cermin datar: Sudut datang i = ${iAngle}° menghasilkan sudut pantul r = ${rAngle}°. Apakah kamu ingin mencoba menyalakan Busur Derajat untuk mengukur ketepatan sudutnya?`;
+    return `Eksperimen cermin datar: Sudut datang i = ${iAngle}° menghasilkan sudut pantul r = ${rAngle}°. Geser laser atau objek lilin untuk mengamati perubahannya!`;
   }
 
-  return `Halo! Saya Asisten Laboratorium DILSA. Saya siap membimbingmu memahami konsep eksperimen ini langkah demi langkah berdasarkan data yang kamu ukur. Apa yang ingin kamu tanyakan atau eksplorasi?`;
+  return `Halo! Saya Asisten Laboratorium DILSA. Saya memantau parameter eksperimenmu secara langsung. Apa yang ingin kamu diskusikan tentang data ini?`;
 }
 
 export async function POST(req: NextRequest) {
@@ -108,61 +100,82 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Pesan tidak boleh kosong" }, { status: 400 });
     }
 
-    // Check if an AI API Key (Gemini) is available in environment
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
 
     if (apiKey) {
       try {
         const systemPrompt = `Kamu adalah Asisten Laboratorium DILSA (Digital Laboratorium Science AI) untuk siswa SMP/MTs (kelas VII-IX).
 Pedoman interaksi:
-1. Bersahabat, mendidik, sopan, bernada ilmiah tetapi mudah dipahami remaja SMP.
+1. Bersahabat, mendidik, ringkas, bernada ilmiah tetapi mudah dipahami siswa SMP.
 2. JANGAN PERNAH memakai emoji atau emotikon apa pun.
-3. Gunakan pola sokratik: Pahami -> Arahkan -> Tanyakan prediksi -> Hubungkan rumus -> Refleksikan.
-4. Gunakan nilai parameter dan pengukuran resmi yang dikirimkan sistem. Jangan mengarang angka atau rumus fiktif.
-5. JANGAN langsung membocorkan jawaban kuis jika siswa bertanya jawaban kuis; berikan petunjuk konsepnya.
-6. Asumsi model adalah simulasi deterministik 2D ideal.
+3. Gunakan pola sokratik: Pahami -> Arahkan -> Tanyakan prediksi -> Hubungkan rumus.
+4. Gunakan nilai parameter dan data pengukuran resmi dari laboratorium.
+5. JANGAN langsung membocorkan jawaban kuis jika siswa bertanya; berikan petunjuk konsepnya.
+6. Berikan jawaban dalam Bahasa Indonesia yang bersih dan rapi.
 
-Konteks Laboratorium:
+Konteks Laboratorium Saat Ini:
 - Topik: ${topic}
 - Parameter aktif: ${JSON.stringify(parameters || {})}
 - Hasil pengukuran saat ini: ${JSON.stringify(measurements || {})}
 - Langkah eksperimen aktif: ${activeStep || 1}`;
 
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [
-                    {
-                      text: `${systemPrompt}\n\nPertanyaan siswa: ${message}`
-                    }
-                  ]
-                }
-              ],
-              generationConfig: {
-                temperature: 0.6,
-                maxOutputTokens: 500
-              }
-            })
-          }
-        );
+        // Support multiple modern Gemini models in fallback order
+        const modelCandidates = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"];
+        let apiSuccess = false;
+        let generatedReply = "";
 
-        if (res.ok) {
-          const data = await res.json();
-          const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (reply) {
-            // Strip any accidental emojis if generated
-            const cleaned = reply.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "");
-            return NextResponse.json({ reply: cleaned, source: "ai_provider" });
+        for (const model of modelCandidates) {
+          try {
+            const res = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      role: "user",
+                      parts: [
+                        {
+                          text: `${systemPrompt}\n\nPertanyaan siswa: ${message}`
+                        }
+                      ]
+                    }
+                  ],
+                  generationConfig: {
+                    temperature: 0.6,
+                    maxOutputTokens: 600
+                  }
+                })
+              }
+            );
+
+            if (res.ok) {
+              const data = await res.json();
+              const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                // Strip emojis if any
+                generatedReply = text.replace(
+                  /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+                  ""
+                );
+                apiSuccess = true;
+                break;
+              }
+            } else {
+              const errText = await res.text();
+              console.warn(`Gemini API error with model ${model}:`, res.status, errText);
+            }
+          } catch (modelErr) {
+            console.warn(`Failed model ${model}:`, modelErr);
           }
         }
+
+        if (apiSuccess && generatedReply) {
+          return NextResponse.json({ reply: generatedReply, source: "gemini_api" });
+        }
       } catch (err) {
-        console.warn("AI provider call failed, falling back to heuristic engine", err);
+        console.warn("AI provider exception, falling back to heuristic engine", err);
       }
     }
 

@@ -326,11 +326,37 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                 {/* Mid-point arrow indicator */}
                 <circle cx={(sourceX + mirrorX) / 2} cy={(sourceY + hitY) / 2} r="3" fill="#EA580C" />
 
-                {/* Laser Source Graphic */}
-                <g transform={`translate(${sourceX - 25}, ${sourceY - 14})`}>
-                  <rect x="0" y="0" width="30" height="20" rx="3" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
-                  <rect x="26" y="5" width="8" height="10" rx="1" fill="#EA580C" />
-                  <text x="14" y="14" fill="#FFFFFF" fontSize="8" fontWeight="bold" textAnchor="middle">
+                {/* Laser Source Graphic (Draggable) */}
+                <g
+                  transform={`translate(${sourceX - 25}, ${sourceY - 14})`}
+                  className="cursor-grab active:cursor-grabbing"
+                  onPointerDown={(e) => {
+                    const svg = e.currentTarget.ownerSVGElement;
+                    if (!svg) return;
+                    const handleMove = (moveEvt: PointerEvent) => {
+                      const rect = svg.getBoundingClientRect();
+                      const curX = moveEvt.clientX - rect.left;
+                      const curY = moveEvt.clientY - rect.top;
+                      const dx = mirrorX - curX;
+                      const dy = hitY - curY;
+                      if (dx > 5) {
+                        const angleRad = Math.atan2(dy, dx);
+                        const deg = Math.round((angleRad * 180) / Math.PI);
+                        const clamped = Math.max(0, Math.min(80, deg));
+                        setIncidentAngle(clamped);
+                      }
+                    };
+                    const handleUp = () => {
+                      window.removeEventListener("pointermove", handleMove);
+                      window.removeEventListener("pointerup", handleUp);
+                    };
+                    window.addEventListener("pointermove", handleMove);
+                    window.addEventListener("pointerup", handleUp);
+                  }}
+                >
+                  <rect x="0" y="0" width="44" height="24" rx="4" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
+                  <rect x="40" y="6" width="8" height="12" rx="1" fill="#EA580C" />
+                  <text x="20" y="16" fill="#FFFFFF" fontSize="9" fontWeight="bold" textAnchor="middle">
                     LASER
                   </text>
                 </g>
@@ -419,8 +445,29 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
 
               return (
                 <g>
-                  {/* Object: Candle */}
-                  <g transform={`translate(${objX}, ${objY})`}>
+                  {/* Object: Candle (Draggable) */}
+                  <g
+                    transform={`translate(${objX}, ${objY})`}
+                    className="cursor-grab active:cursor-grabbing"
+                    onPointerDown={(e) => {
+                      const svg = e.currentTarget.ownerSVGElement;
+                      if (!svg) return;
+                      const handleMove = (moveEvt: PointerEvent) => {
+                        const rect = svg.getBoundingClientRect();
+                        const curX = moveEvt.clientX - rect.left;
+                        const distPx = mirrorX - curX;
+                        const distCm = Math.round(distPx / 7.5);
+                        const clamped = Math.max(5, Math.min(38, distCm));
+                        setObjectDistance(clamped);
+                      };
+                      const handleUp = () => {
+                        window.removeEventListener("pointermove", handleMove);
+                        window.removeEventListener("pointerup", handleUp);
+                      };
+                      window.addEventListener("pointermove", handleMove);
+                      window.addEventListener("pointerup", handleUp);
+                    }}
+                  >
                     {/* Candle body */}
                     <rect x="-8" y="-objectHeight" width="16" height={objectHeight} rx="2" fill="#F59E0B" stroke="#D97706" strokeWidth="1.5" />
                     {/* Candle Flame */}
@@ -435,7 +482,7 @@ export default function OpticsLab({ topic, onStateChange }: OpticsLabProps) {
                     {/* Distance Ruler Arrow to mirror */}
                     <line x1="0" y1="20" x2={mirrorX - objX} y2="20" stroke="#174A8B" strokeWidth="1.5" strokeDasharray="3 3" />
                     <text x={(mirrorX - objX) / 2} y="36" fill="#174A8B" fontSize="11" fontWeight="bold" textAnchor="middle">
-                      s = {objectDistance} cm
+                      s = {objectDistance} cm (Geser)
                     </text>
                     <text x="0" y="-objectHeight-24" fill="#172B45" fontSize="11" fontWeight="bold" textAnchor="middle">
                       Benda Nyata

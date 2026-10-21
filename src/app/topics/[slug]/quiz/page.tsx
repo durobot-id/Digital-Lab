@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/navigation/Breadcrumb";
 import QuizRunner from "@/components/quiz/QuizRunner";
 
+export const instant = false;
+
 export function generateStaticParams() {
   return TOPICS.map((topic) => ({ slug: topic.slug }));
 }

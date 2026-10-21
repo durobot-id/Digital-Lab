@@ -336,7 +336,33 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
               const cartY = 160 - cartHeight;
 
               return (
-                <g>
+                <g
+                  className="cursor-grab active:cursor-grabbing"
+                  onPointerDown={(e) => {
+                    const svg = e.currentTarget.ownerSVGElement;
+                    if (!svg) return;
+                    setIsRunning(false);
+                    const rect = svg.getBoundingClientRect();
+                    const startX = e.clientX;
+                    const initialPos = position;
+
+                    const handleMove = (moveEvt: PointerEvent) => {
+                      const deltaPx = moveEvt.clientX - startX;
+                      const deltaMeters = deltaPx / 58;
+                      const clamped = Math.max(0.5, Math.min(11.5, initialPos + deltaMeters));
+                      setPosition(Number(clamped.toFixed(2)));
+                      setVelocity(0);
+                    };
+
+                    const handleUp = () => {
+                      window.removeEventListener("pointermove", handleMove);
+                      window.removeEventListener("pointerup", handleUp);
+                    };
+
+                    window.addEventListener("pointermove", handleMove);
+                    window.addEventListener("pointerup", handleUp);
+                  }}
+                >
                   {/* Cart Body */}
                   <rect
                     x={cartX - cartWidth / 2}
@@ -347,7 +373,6 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
                     fill="#174A8B"
                     stroke="#0F2D54"
                     strokeWidth="2"
-                    className="cursor-grab active:cursor-grabbing"
                   />
                   {/* Cart Label */}
                   <text
@@ -367,7 +392,7 @@ export default function MotionLab({ topic, onStateChange }: MotionLabProps) {
                     fontSize="10"
                     textAnchor="middle"
                   >
-                    massa
+                    (Geser Balok)
                   </text>
 
                   {/* Wheels */}

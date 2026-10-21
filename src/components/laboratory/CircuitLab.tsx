@@ -1,17 +1,20 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Zap,
   RotateCcw,
   Plus,
+  Trash2,
   Table,
+  Zap,
+  Sliders,
+  Power,
+  Sparkles,
   HelpCircle,
   CheckCircle2,
-  Sliders,
-  ChevronDown,
-  ChevronUp,
-  Power
+  MousePointer,
+  Cable,
+  FolderOpen
 } from "lucide-react";
 import { TopicData } from "@/types";
 
@@ -20,777 +23,939 @@ interface CircuitLabProps {
   onStateChange?: (state: any) => void;
 }
 
-interface CircuitDataPoint {
-  id: number;
-  mode: string;
-  voltage: number;
-  r1: number;
-  r2: number;
-  switchState: string;
-  currentTotal: number;
-  powerTotal: number;
-  rTotal: number;
+export type ComponentType = "battery" | "lamp" | "switch" | "resistor" | "ammeter";
+
+export interface Terminal {
+  id: string; // e.g. "comp-1-t1"
+  label: string; // "+" or "-" or "1" or "2"
+  relX: number;
+  relY: number;
+}
+
+export interface PlacedComponent {
+  id: string;
+  type: ComponentType;
+  x: number;
+  y: number;
+  label: string;
+  voltage?: number; // for battery
+  resistance?: number; // for lamp / resistor
+  isClosed?: boolean; // for switch
+  terminals: Terminal[];
+}
+
+export interface Wire {
+  id: string;
+  fromCompId: string;
+  fromTermId: string;
+  toCompId: string;
+  toTermId: string;
 }
 
 export default function CircuitLab({ topic, onStateChange }: CircuitLabProps) {
-  // Mode: "single" | "series" | "parallel"
-  const [circuitType, setCircuitType] = useState<"single" | "series" | "parallel">("series");
-  const [isSwitchClosed, setIsSwitchClosed] = useState<boolean>(true);
-  const [voltage, setVoltage] = useState<number>(12); // Volts (1.5 to 24)
-  const [resistance1, setResistance1] = useState<number>(10); // Ohm (5 to 50)
-  const [resistance2, setResistance2] = useState<number>(10); // Ohm (5 to 50)
-
-  // Guided step & observations
-  const [activeStep, setActiveStep] = useState<number>(1);
-  const [showGuide, setShowGuide] = useState<boolean>(true);
-  const [showTable, setShowTable] = useState<boolean>(true);
-  const [recordedData, setRecordedData] = useState<CircuitDataPoint[]>([]);
-
-  // Physics calculations (Deterministik Hukum Ohm)
-  let rTotal = 0;
-  let iTotal = 0;
-  let i1 = 0;
-  let i2 = 0;
-  let v1 = 0;
-  let v2 = 0;
-  let p1 = 0;
-  let p2 = 0;
-
-  if (isSwitchClosed) {
-    if (circuitType === "single") {
-      rTotal = resistance1;
-      iTotal = Number((voltage / rTotal).toFixed(2));
-      i1 = iTotal;
-      v1 = voltage;
-      p1 = Number((v1 * i1).toFixed(2));
-    } else if (circuitType === "series") {
-      rTotal = resistance1 + resistance2;
-      iTotal = Number((voltage / rTotal).toFixed(2));
-      i1 = iTotal;
-      i2 = iTotal;
-      v1 = Number((iTotal * resistance1).toFixed(2));
-      v2 = Number((iTotal * resistance2).toFixed(2));
-      p1 = Number((i1 * i1 * resistance1).toFixed(2));
-      p2 = Number((i2 * i2 * resistance2).toFixed(2));
-    } else if (circuitType === "parallel") {
-      rTotal = Number(((resistance1 * resistance2) / (resistance1 + resistance2)).toFixed(2));
-      i1 = Number((voltage / resistance1).toFixed(2));
-      i2 = Number((voltage / resistance2).toFixed(2));
-      iTotal = Number((i1 + i2).toFixed(2));
-      v1 = voltage;
-      v2 = voltage;
-      p1 = Number((voltage * i1).toFixed(2));
-      p2 = Number((voltage * i2).toFixed(2));
+  // Preset or custom components
+  const [components, setComponents] = useState<PlacedComponent[]>([
+    {
+      id: "bat-1",
+      type: "battery",
+      x: 140,
+      y: 160,
+      label: "Baterai 12V",
+      voltage: 12,
+      terminals: [
+        { id: "bat-1-pos", label: "+", relX: 45, relY: -28 },
+        { id: "bat-1-neg", label: "-", relX: -45, relY: -28 }
+      ]
+    },
+    {
+      id: "sw-1",
+      type: "switch",
+      x: 340,
+      y: 70,
+      label: "Sakelar",
+      isClosed: true,
+      terminals: [
+        { id: "sw-1-t1", label: "A", relX: -40, relY: 0 },
+        { id: "sw-1-t2", label: "B", relX: 40, relY: 0 }
+      ]
+    },
+    {
+      id: "lamp-1",
+      type: "lamp",
+      x: 560,
+      y: 160,
+      label: "Lampu 1 (10Ω)",
+      resistance: 10,
+      terminals: [
+        { id: "lamp-1-t1", label: "1", relX: -35, relY: 28 },
+        { id: "lamp-1-t2", label: "2", relX: 35, relY: 28 }
+      ]
     }
-  }
+  ]);
 
-  const pTotal = Number((p1 + p2).toFixed(2));
+  // Initial wires forming a complete loop
+  const [wires, setWires] = useState<Wire[]>([
+    {
+      id: "w-1",
+      fromCompId: "bat-1",
+      fromTermId: "bat-1-pos",
+      toCompId: "sw-1",
+      toTermId: "sw-1-t1"
+    },
+    {
+      id: "w-2",
+      fromCompId: "sw-1",
+      fromTermId: "sw-1-t2",
+      toCompId: "lamp-1",
+      toTermId: "lamp-1-t1"
+    },
+    {
+      id: "w-3",
+      fromCompId: "lamp-1",
+      fromTermId: "lamp-1-t2",
+      toCompId: "bat-1",
+      toTermId: "bat-1-neg"
+    }
+  ]);
 
-  // Sync state to parent / AI assistant
+  const [selectedCompId, setSelectedCompId] = useState<string | null>("bat-1");
+  const [activeWiringPin, setActiveWiringPin] = useState<{
+    compId: string;
+    termId: string;
+  } | null>(null);
+
+  // Dragging state
+  const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // Simulation output
+  const [circuitStats, setCircuitStats] = useState({
+    isClosedLoop: true,
+    currentTotal: 1.2,
+    voltageSource: 12,
+    resistanceTotal: 10,
+    powerTotal: 14.4
+  });
+
+  // Calculate Circuit Loop State
   useEffect(() => {
+    const battery = components.find((c) => c.type === "battery");
+    if (!battery) {
+      setCircuitStats({
+        isClosedLoop: false,
+        currentTotal: 0,
+        voltageSource: 0,
+        resistanceTotal: 0,
+        powerTotal: 0
+      });
+      return;
+    }
+
+    const posPinId = `${battery.id}-pos`;
+    const negPinId = `${battery.id}-neg`;
+
+    // Build adjacency graph between component terminals
+    const adj: Record<string, string[]> = {};
+    wires.forEach((w) => {
+      if (!adj[w.fromTermId]) adj[w.fromTermId] = [];
+      if (!adj[w.toTermId]) adj[w.toTermId] = [];
+      adj[w.fromTermId].push(w.toTermId);
+      adj[w.toTermId].push(w.fromTermId);
+    });
+
+    // Internal component continuity
+    components.forEach((c) => {
+      if (c.type === "switch") {
+        if (c.isClosed) {
+          const t1 = `${c.id}-t1`;
+          const t2 = `${c.id}-t2`;
+          if (!adj[t1]) adj[t1] = [];
+          if (!adj[t2]) adj[t2] = [];
+          adj[t1].push(t2);
+          adj[t2].push(t1);
+        }
+      } else if (c.type === "lamp" || c.type === "resistor" || c.type === "ammeter") {
+        const t1 = `${c.id}-t1`;
+        const t2 = `${c.id}-t2`;
+        if (!adj[t1]) adj[t1] = [];
+        if (!adj[t2]) adj[t2] = [];
+        adj[t1].push(t2);
+        adj[t2].push(t1);
+      }
+    });
+
+    // BFS from battery positive to battery negative
+    const visited = new Set<string>();
+    const queue: string[] = [posPinId];
+    visited.add(posPinId);
+    let reachedNegative = false;
+
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      if (curr === negPinId) {
+        reachedNegative = true;
+        break;
+      }
+      for (const neighbor of adj[curr] || []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    // Calculate resistances of visited components
+    let totalR = 0;
+    components.forEach((c) => {
+      if (c.type === "lamp" || c.type === "resistor") {
+        const t1 = `${c.id}-t1`;
+        const t2 = `${c.id}-t2`;
+        if (visited.has(t1) && visited.has(t2)) {
+          totalR += c.resistance || 10;
+        }
+      }
+    });
+
+    if (totalR === 0) totalR = 0.5; // Wire safety resistance to prevent divide by zero
+    const v = battery.voltage || 12;
+    const isClosed = reachedNegative;
+    const current = isClosed ? Number((v / totalR).toFixed(2)) : 0;
+    const power = isClosed ? Number((v * current).toFixed(2)) : 0;
+
+    setCircuitStats({
+      isClosedLoop: isClosed,
+      currentTotal: current,
+      voltageSource: v,
+      resistanceTotal: totalR,
+      powerTotal: power
+    });
+
     if (onStateChange) {
       onStateChange({
         topic: "kelistrikan",
         parameters: {
-          tipeRangkaian: circuitType,
-          statusSakelar: isSwitchClosed ? "Tertutup (Arus Mengalir)" : "Terbuka (Arus Terputus)",
-          teganganBaterai_V: voltage,
-          hambatanLampu1_Ohm: resistance1,
-          hambatanLampu2_Ohm: circuitType !== "single" ? resistance2 : 0
+          teganganBaterai_V: v,
+          hambatanTotal_Ohm: totalR,
+          jumlahKomponen: components.length,
+          jumlahKabel: wires.length,
+          statusLoop: isClosed ? "Tertutup (Arus Mengalir)" : "Terbuka (Arus Nol)"
         },
         measurements: {
-          hambatanTotal_Ohm: rTotal,
-          kuatArusTotal_A: iTotal,
-          kuatArusLampu1_A: i1,
-          kuatArusLampu2_A: i2,
-          dayaLampu1_W: p1,
-          dayaLampu2_W: p2,
-          dayaTotal_W: pTotal
-        },
-        activeExperimentStep: activeStep
+          hambatanTotal_Ohm: totalR,
+          kuatArusTotal_A: current,
+          dayaTotal_W: power
+        }
       });
     }
-  }, [
-    circuitType,
-    isSwitchClosed,
-    voltage,
-    resistance1,
-    resistance2,
-    rTotal,
-    iTotal,
-    i1,
-    i2,
-    p1,
-    p2,
-    pTotal,
-    activeStep,
-    onStateChange
-  ]);
+  }, [components, wires, onStateChange]);
 
-  const handleReset = () => {
-    setCircuitType("series");
-    setIsSwitchClosed(true);
-    setVoltage(12);
-    setResistance1(10);
-    setResistance2(10);
-  };
+  // Handle Dragging Components
+  const handlePointerDown = (e: React.PointerEvent, comp: PlacedComponent) => {
+    // If clicking a terminal pin, let pin handler take over
+    if ((e.target as HTMLElement).getAttribute("data-pin")) return;
 
-  const handleRecordData = () => {
-    const entry: CircuitDataPoint = {
-      id: Date.now(),
-      mode: circuitType === "single" ? "Tunggal" : circuitType === "series" ? "Seri" : "Paralel",
-      voltage,
-      r1: resistance1,
-      r2: circuitType === "single" ? 0 : resistance2,
-      switchState: isSwitchClosed ? "Tertutup" : "Terbuka",
-      currentTotal: iTotal,
-      powerTotal: pTotal,
-      rTotal
+    setSelectedCompId(comp.id);
+    setDraggingCompId(comp.id);
+
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
+
+    dragOffsetRef.current = {
+      x: clientX - comp.x,
+      y: clientY - comp.y
     };
-    setRecordedData((prev) => [...prev, entry]);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  // Lamp brightness opacity (max 100W ref)
-  const lamp1Brightness = Math.min(1, Math.max(0, p1 / 25));
-  const lamp2Brightness = Math.min(1, Math.max(0, p2 / 25));
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!draggingCompId || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
+
+    const newX = Math.max(60, Math.min(740, clientX - dragOffsetRef.current.x));
+    const newY = Math.max(50, Math.min(340, clientY - dragOffsetRef.current.y));
+
+    setComponents((prev) =>
+      prev.map((c) => (c.id === draggingCompId ? { ...c, x: newX, y: newY } : c))
+    );
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (draggingCompId) {
+      try {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch (err) {}
+      setDraggingCompId(null);
+    }
+  };
+
+  // Handle Connecting Wires Between Terminal Pins
+  const handlePinClick = (compId: string, termId: string) => {
+    if (!activeWiringPin) {
+      // First terminal selected
+      setActiveWiringPin({ compId, termId });
+    } else {
+      // Second terminal clicked -> create wire if from different pin
+      if (activeWiringPin.termId === termId) {
+        setActiveWiringPin(null);
+        return;
+      }
+
+      // Check if wire already exists
+      const exists = wires.some(
+        (w) =>
+          (w.fromTermId === activeWiringPin.termId && w.toTermId === termId) ||
+          (w.fromTermId === termId && w.toTermId === activeWiringPin.termId)
+      );
+
+      if (!exists) {
+        const newWire: Wire = {
+          id: `wire-${Date.now()}`,
+          fromCompId: activeWiringPin.compId,
+          fromTermId: activeWiringPin.termId,
+          toCompId: compId,
+          toTermId: termId
+        };
+        setWires((prev) => [...prev, newWire]);
+      }
+      setActiveWiringPin(null);
+    }
+  };
+
+  // Add Component to Workbench
+  const addComponent = (type: ComponentType) => {
+    const id = `${type}-${Date.now()}`;
+    let newComp: PlacedComponent;
+
+    const spawnX = 200 + (components.length % 5) * 60;
+    const spawnY = 150 + ((components.length * 20) % 80);
+
+    if (type === "battery") {
+      newComp = {
+        id,
+        type: "battery",
+        x: spawnX,
+        y: spawnY,
+        label: "Baterai 12V",
+        voltage: 12,
+        terminals: [
+          { id: `${id}-pos`, label: "+", relX: 45, relY: -28 },
+          { id: `${id}-neg`, label: "-", relX: -45, relY: -28 }
+        ]
+      };
+    } else if (type === "lamp") {
+      newComp = {
+        id,
+        type: "lamp",
+        x: spawnX,
+        y: spawnY,
+        label: `Lampu (${10}Ω)`,
+        resistance: 10,
+        terminals: [
+          { id: `${id}-t1`, label: "1", relX: -35, relY: 28 },
+          { id: `${id}-t2`, label: "2", relX: 35, relY: 28 }
+        ]
+      };
+    } else if (type === "switch") {
+      newComp = {
+        id,
+        type: "switch",
+        x: spawnX,
+        y: spawnY,
+        label: "Sakelar",
+        isClosed: true,
+        terminals: [
+          { id: `${id}-t1`, label: "A", relX: -40, relY: 0 },
+          { id: `${id}-t2`, label: "B", relX: 40, relY: 0 }
+        ]
+      };
+    } else if (type === "resistor") {
+      newComp = {
+        id,
+        type: "resistor",
+        x: spawnX,
+        y: spawnY,
+        label: "Resistor (20Ω)",
+        resistance: 20,
+        terminals: [
+          { id: `${id}-t1`, label: "1", relX: -40, relY: 0 },
+          { id: `${id}-t2`, label: "2", relX: 40, relY: 0 }
+        ]
+      };
+    } else {
+      newComp = {
+        id,
+        type: "ammeter",
+        x: spawnX,
+        y: spawnY,
+        label: "Ammeter",
+        terminals: [
+          { id: `${id}-t1`, label: "+", relX: -35, relY: 0 },
+          { id: `${id}-t2`, label: "-", relX: 35, relY: 0 }
+        ]
+      };
+    }
+
+    setComponents((prev) => [...prev, newComp]);
+    setSelectedCompId(id);
+  };
+
+  // Remove Selected Component
+  const deleteSelected = () => {
+    if (!selectedCompId) return;
+    setComponents((prev) => prev.filter((c) => c.id !== selectedCompId));
+    setWires((prev) =>
+      prev.filter(
+        (w) => w.fromCompId !== selectedCompId && w.toCompId !== selectedCompId
+      )
+    );
+    setSelectedCompId(null);
+  };
+
+  // Toggle Switch
+  const toggleSwitch = (switchId: string) => {
+    setComponents((prev) =>
+      prev.map((c) => (c.id === switchId ? { ...c, isClosed: !c.isClosed } : c))
+    );
+  };
+
+  // Preset Loaders
+  const loadPresetSeries = () => {
+    setComponents([
+      {
+        id: "bat-1",
+        type: "battery",
+        x: 140,
+        y: 200,
+        label: "Baterai 12V",
+        voltage: 12,
+        terminals: [
+          { id: "bat-1-pos", label: "+", relX: 45, relY: -28 },
+          { id: "bat-1-neg", label: "-", relX: -45, relY: -28 }
+        ]
+      },
+      {
+        id: "sw-1",
+        type: "switch",
+        x: 280,
+        y: 90,
+        label: "Sakelar",
+        isClosed: true,
+        terminals: [
+          { id: "sw-1-t1", label: "A", relX: -40, relY: 0 },
+          { id: "sw-1-t2", label: "B", relX: 40, relY: 0 }
+        ]
+      },
+      {
+        id: "lamp-1",
+        type: "lamp",
+        x: 460,
+        y: 90,
+        label: "Lampu 1 (10Ω)",
+        resistance: 10,
+        terminals: [
+          { id: "lamp-1-t1", label: "1", relX: -35, relY: 28 },
+          { id: "lamp-1-t2", label: "2", relX: 35, relY: 28 }
+        ]
+      },
+      {
+        id: "lamp-2",
+        type: "lamp",
+        x: 620,
+        y: 200,
+        label: "Lampu 2 (10Ω)",
+        resistance: 10,
+        terminals: [
+          { id: "lamp-2-t1", label: "1", relX: -35, relY: 28 },
+          { id: "lamp-2-t2", label: "2", relX: 35, relY: 28 }
+        ]
+      }
+    ]);
+    setWires([
+      { id: "w1", fromCompId: "bat-1", fromTermId: "bat-1-pos", toCompId: "sw-1", toTermId: "sw-1-t1" },
+      { id: "w2", fromCompId: "sw-1", fromTermId: "sw-1-t2", toCompId: "lamp-1", toTermId: "lamp-1-t1" },
+      { id: "w3", fromCompId: "lamp-1", fromTermId: "lamp-1-t2", toCompId: "lamp-2", toTermId: "lamp-2-t1" },
+      { id: "w4", fromCompId: "lamp-2", fromTermId: "lamp-2-t2", toCompId: "bat-1", toTermId: "bat-1-neg" }
+    ]);
+  };
+
+  const loadPresetParallel = () => {
+    setComponents([
+      {
+        id: "bat-1",
+        type: "battery",
+        x: 140,
+        y: 190,
+        label: "Baterai 12V",
+        voltage: 12,
+        terminals: [
+          { id: "bat-1-pos", label: "+", relX: 45, relY: -28 },
+          { id: "bat-1-neg", label: "-", relX: -45, relY: -28 }
+        ]
+      },
+      {
+        id: "sw-1",
+        type: "switch",
+        x: 320,
+        y: 70,
+        label: "Sakelar Utama",
+        isClosed: true,
+        terminals: [
+          { id: "sw-1-t1", label: "A", relX: -40, relY: 0 },
+          { id: "sw-1-t2", label: "B", relX: 40, relY: 0 }
+        ]
+      },
+      {
+        id: "lamp-1",
+        type: "lamp",
+        x: 540,
+        y: 110,
+        label: "Lampu Cabang 1 (10Ω)",
+        resistance: 10,
+        terminals: [
+          { id: "lamp-1-t1", label: "1", relX: -35, relY: 28 },
+          { id: "lamp-1-t2", label: "2", relX: 35, relY: 28 }
+        ]
+      },
+      {
+        id: "lamp-2",
+        type: "lamp",
+        x: 540,
+        y: 260,
+        label: "Lampu Cabang 2 (10Ω)",
+        resistance: 10,
+        terminals: [
+          { id: "lamp-2-t1", label: "1", relX: -35, relY: 28 },
+          { id: "lamp-2-t2", label: "2", relX: 35, relY: 28 }
+        ]
+      }
+    ]);
+    setWires([
+      { id: "w1", fromCompId: "bat-1", fromTermId: "bat-1-pos", toCompId: "sw-1", toTermId: "sw-1-t1" },
+      { id: "w2", fromCompId: "sw-1", fromTermId: "sw-1-t2", toCompId: "lamp-1", toTermId: "lamp-1-t1" },
+      { id: "w3", fromCompId: "sw-1", fromTermId: "sw-1-t2", toCompId: "lamp-2", toTermId: "lamp-2-t1" },
+      { id: "w4", fromCompId: "lamp-1", fromTermId: "lamp-1-t2", toCompId: "bat-1", toTermId: "bat-1-neg" },
+      { id: "w5", fromCompId: "lamp-2", fromTermId: "lamp-2-t2", toCompId: "bat-1", toTermId: "bat-1-neg" }
+    ]);
+  };
+
+  const clearCanvas = () => {
+    setComponents([]);
+    setWires([]);
+    setSelectedCompId(null);
+  };
+
+  // Helper to get absolute coordinates of a terminal pin
+  const getPinCoords = (termId: string) => {
+    for (const c of components) {
+      const term = c.terminals.find((t) => t.id === termId);
+      if (term) {
+        return { x: c.x + term.relX, y: c.y + term.relY };
+      }
+    }
+    return { x: 0, y: 0 };
+  };
+
+  const selectedComp = components.find((c) => c.id === selectedCompId);
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Experiment Steps Guide Banner */}
-      <div className="bg-white rounded-xl border border-[#DCE6F1] shadow-xs overflow-hidden">
-        <div
-          className="flex items-center justify-between p-4 bg-[#F3F8FF] border-b border-[#DCE6F1] cursor-pointer"
-          onClick={() => setShowGuide(!showGuide)}
-        >
-          <div className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5 text-[#2583E8]" />
-            <h3 className="font-semibold text-[#172B45] text-sm">
-              Panduan Langkah Eksperimen Kelistrikan
-            </h3>
-            <span className="text-xs bg-[#DDF0FF] text-[#174A8B] px-2 py-0.5 rounded-full font-medium">
-              Langkah {activeStep} dari 3
-            </span>
-          </div>
-          <button className="text-[#617187] hover:text-[#172B45]" aria-label="Toggle panduan">
-            {showGuide ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      {/* Workbench Action Toolbar */}
+      <div className="bg-white rounded-2xl border border-[#DCE6F1] shadow-xs p-4 flex flex-wrap items-center justify-between gap-4">
+        {/* Component Spawner Tray */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-[#174A8B] mr-1 uppercase tracking-wider flex items-center gap-1.5">
+            <Plus className="w-4 h-4 text-[#2583E8]" />
+            Ambil Komponen:
+          </span>
+          <button
+            onClick={() => addComponent("battery")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#F3F8FF] text-[#174A8B] border border-[#DCE6F1] hover:bg-[#DDF0FF] hover:border-[#2583E8] transition-all"
+          >
+            🔋 + Baterai
+          </button>
+          <button
+            onClick={() => addComponent("lamp")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#F3F8FF] text-[#174A8B] border border-[#DCE6F1] hover:bg-[#DDF0FF] hover:border-[#2583E8] transition-all"
+          >
+            💡 + Lampu
+          </button>
+          <button
+            onClick={() => addComponent("switch")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#F3F8FF] text-[#174A8B] border border-[#DCE6F1] hover:bg-[#DDF0FF] hover:border-[#2583E8] transition-all"
+          >
+            ⚡ + Sakelar
+          </button>
+          <button
+            onClick={() => addComponent("resistor")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#F3F8FF] text-[#174A8B] border border-[#DCE6F1] hover:bg-[#DDF0FF] hover:border-[#2583E8] transition-all"
+          >
+            🟫 + Resistor
           </button>
         </div>
 
-        {showGuide && (
-          <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-            {topic.labConfig.suggestedExperiments.map((exp) => (
-              <div
-                key={exp.step}
-                onClick={() => setActiveStep(exp.step)}
-                className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                  activeStep === exp.step
-                    ? "border-[#2583E8] bg-[#F3F8FF] ring-1 ring-[#2583E8]"
-                    : "border-[#DCE6F1] bg-white hover:bg-[#F3F8FF]"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                      activeStep === exp.step
-                        ? "bg-[#2583E8] text-white"
-                        : "bg-[#DDF0FF] text-[#174A8B]"
-                    }`}
-                  >
-                    {exp.step}
-                  </span>
-                  <span className="font-medium text-xs text-[#172B45]">{exp.title}</span>
-                </div>
-                <p className="text-xs text-[#617187] line-clamp-2 mb-1">{exp.instruction}</p>
-                <p className="text-[11px] text-[#23845B] font-medium flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 shrink-0" /> {exp.expectedObservation}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Templates & Reset */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadPresetSeries}
+            className="text-xs px-3 py-1.5 rounded-xl font-medium bg-white border border-[#DCE6F1] text-[#617187] hover:text-[#174A8B] hover:bg-[#F3F8FF]"
+          >
+            Susun Seri
+          </button>
+          <button
+            onClick={loadPresetParallel}
+            className="text-xs px-3 py-1.5 rounded-xl font-medium bg-white border border-[#DCE6F1] text-[#617187] hover:text-[#174A8B] hover:bg-[#F3F8FF]"
+          >
+            Susun Paralel
+          </button>
+          <button
+            onClick={clearCanvas}
+            className="text-xs px-3 py-1.5 rounded-xl font-medium bg-white border border-[#DCE6F1] text-[#C43D4B] hover:bg-red-50"
+            title="Bersihkan meja kerja"
+          >
+            Kosongkan
+          </button>
+        </div>
       </div>
 
-      {/* Main 2D Circuit Canvas */}
-      <div className="bg-white rounded-xl border border-[#DCE6F1] shadow-xs p-5">
+      {/* Main Interactive Breadboard / Canvas */}
+      <div className="bg-white rounded-2xl border border-[#DCE6F1] shadow-xs p-5">
+        {/* Canvas Status & Multimeter Header */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-[#DCE6F1]">
-          <div>
-            <h2 className="text-base font-bold text-[#174A8B]">
-              Simulasi Rangkaian DC: {circuitType === "series" ? "Rangkaian Seri" : circuitType === "parallel" ? "Rangkaian Paralel" : "Rangkaian Tunggal"}
-            </h2>
-            <p className="text-xs text-[#617187]">
-              Titik kuning menunjukkan arah aliran konvensional arus (dari kutub positif ke negatif).
-            </p>
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-3 h-3 rounded-full ${
+                circuitStats.isClosedLoop ? "bg-emerald-500 animate-pulse" : "bg-red-400"
+              }`}
+            ></span>
+            <span className="text-xs font-bold text-[#172B45]">
+              {circuitStats.isClosedLoop
+                ? "Rangkaian Tertutup (Arus Mengalir)"
+                : "Rangkaian Terbuka (Arus Terputus / Belum Tersambung)"}
+            </span>
           </div>
 
-          {/* Quick Metrics Multi-meter */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span
-              className={`px-2.5 py-1 rounded-md font-semibold text-xs border ${
-                isSwitchClosed
-                  ? "bg-[#23845B]/10 text-[#23845B] border-[#23845B]/30"
-                  : "bg-red-50 text-[#C43D4B] border-red-200"
-              }`}
-            >
-              {isSwitchClosed ? "Rangkaian Tertutup" : "Rangkaian Terbuka"}
+          {/* Multimeter Digital Readout */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <span className="px-2.5 py-1 rounded-md bg-[#F3F8FF] border border-[#DCE6F1] text-[#174A8B] font-semibold">
+              V = {circuitStats.voltageSource} V
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-[#F3F8FF] border border-[#DCE6F1] font-mono font-medium text-[#172B45]">
-              V = {voltage} V
+            <span className="px-2.5 py-1 rounded-md bg-[#DDF0FF] border border-[#2583E8]/30 text-[#174A8B] font-bold">
+              I = {circuitStats.currentTotal} A
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-[#DDF0FF] border border-[#2583E8]/30 font-mono font-semibold text-[#174A8B]">
-              I_total = {iTotal} A
+            <span className="px-2.5 py-1 rounded-md bg-[#FFF4C7] border border-[#FFD45A]/50 text-[#A96508] font-bold">
+              R_total = {circuitStats.resistanceTotal} Ω
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-[#FFF4C7] border border-[#FFD45A]/50 font-mono font-semibold text-[#A96508]">
-              R_total = {rTotal} Ω
-            </span>
-            <span className="px-2.5 py-1 rounded-md bg-white border border-[#DCE6F1] font-mono text-[#617187]">
-              P_total = {pTotal} W
+            <span className="px-2.5 py-1 rounded-md bg-white border border-[#DCE6F1] text-[#23845B] font-bold">
+              P = {circuitStats.powerTotal} W
             </span>
           </div>
         </div>
 
-        {/* Circuit Schematic SVG Canvas */}
-        <div className="relative w-full h-80 bg-gradient-to-b from-[#FAFBFD] to-[#F1F5F9] rounded-lg border border-[#DCE6F1] overflow-hidden select-none">
-          <svg className="w-full h-full" viewBox="0 0 800 320">
+        {/* Tip for User */}
+        <div className="mb-3 px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#DCE6F1] text-[11px] text-[#617187] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Cable className="w-4 h-4 text-[#2583E8]" />
+            <span>
+              <strong>Cara Sambung Kabel:</strong> Klik pin terminal bulat (merah/biru) pada komponen pertama, lalu klik pin terminal komponen tujuan. Seret komponen untuk memindahkannya.
+            </span>
+          </div>
+          {activeWiringPin && (
+            <span className="px-2 py-0.5 rounded bg-[#FFD45A] text-[#172B45] font-bold text-[10px] animate-pulse">
+              Pin Terpilih: Klik pin tujuan untuk menyambung!
+            </span>
+          )}
+        </div>
+
+        {/* SVG Interactive Canvas */}
+        <div className="relative w-full h-96 bg-[#F8FAFC] rounded-xl border border-[#DCE6F1] overflow-hidden select-none">
+          <svg
+            ref={svgRef}
+            className="w-full h-full cursor-default"
+            viewBox="0 0 800 380"
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+          >
+            {/* Dot Grid */}
             <defs>
-              <pattern id="circuit-grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#E2E8F0" strokeWidth="0.8" />
+              <pattern id="work-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <circle cx="10" cy="10" r="1" fill="#CBD5E1" />
               </pattern>
-              {/* Glow filter for Lamp 1 */}
-              <radialGradient id="lamp1-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#FFD45A" stopOpacity={lamp1Brightness} />
-                <stop offset="60%" stopColor="#FFC107" stopOpacity={lamp1Brightness * 0.7} />
-                <stop offset="100%" stopColor="#FFC107" stopOpacity="0" />
-              </radialGradient>
-              {/* Glow filter for Lamp 2 */}
-              <radialGradient id="lamp2-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#FFD45A" stopOpacity={lamp2Brightness} />
-                <stop offset="60%" stopColor="#FFC107" stopOpacity={lamp2Brightness * 0.7} />
-                <stop offset="100%" stopColor="#FFC107" stopOpacity="0" />
-              </radialGradient>
             </defs>
-            <rect width="800" height="320" fill="url(#circuit-grid)" />
+            <rect width="800" height="380" fill="url(#work-grid)" />
 
-            {/* Circuit Wire Traces */}
-            {circuitType === "series" && (
-              <g>
-                {/* Outer loop: (120,60) -> (680,60) -> (680,260) -> (120,260) -> (120,60) */}
-                <path
-                  d="M 120 60 L 680 60 L 680 260 L 120 260 Z"
-                  fill="none"
-                  stroke={isSwitchClosed ? "#2583E8" : "#94A3B8"}
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Current electron flow animation if closed */}
-                {isSwitchClosed && iTotal > 0 && (
+            {/* Render Wires */}
+            {wires.map((w) => {
+              const start = getPinCoords(w.fromTermId);
+              const end = getPinCoords(w.toTermId);
+              const midX = (start.x + end.x) / 2;
+              const midY = (start.y + end.y) / 2;
+
+              // Smooth curve
+              const pathD = `M ${start.x} ${start.y} Q ${midX} ${midY + (end.y - start.y) * 0.2} ${end.x} ${end.y}`;
+
+              return (
+                <g key={w.id} className="group cursor-pointer">
+                  {/* Clickable hit area to delete wire */}
                   <path
-                    d="M 120 60 L 680 60 L 680 260 L 120 260 Z"
+                    d={pathD}
                     fill="none"
-                    stroke="#FFD45A"
-                    strokeWidth="3"
-                    strokeDasharray="6 14"
-                    strokeLinecap="round"
-                    className="animate-pulse"
+                    stroke="transparent"
+                    strokeWidth="16"
+                    onClick={() => setWires((prev) => prev.filter((item) => item.id !== w.id))}
                   />
-                )}
-              </g>
-            )}
-
-            {circuitType === "single" && (
-              <g>
-                <path
-                  d="M 140 70 L 660 70 L 660 250 L 140 250 Z"
-                  fill="none"
-                  stroke={isSwitchClosed ? "#2583E8" : "#94A3B8"}
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {isSwitchClosed && iTotal > 0 && (
+                  {/* Wire core */}
                   <path
-                    d="M 140 70 L 660 70 L 660 250 L 140 250 Z"
+                    d={pathD}
                     fill="none"
-                    stroke="#FFD45A"
-                    strokeWidth="3"
-                    strokeDasharray="6 14"
+                    stroke={circuitStats.isClosedLoop ? "#2583E8" : "#94A3B8"}
+                    strokeWidth="4"
                     strokeLinecap="round"
                   />
-                )}
-              </g>
-            )}
-
-            {circuitType === "parallel" && (
-              <g>
-                {/* Main Outer Loop */}
-                <path
-                  d="M 120 60 L 680 60 L 680 260 L 120 260 Z"
-                  fill="none"
-                  stroke={isSwitchClosed ? "#2583E8" : "#94A3B8"}
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Center Parallel Branch Wire */}
-                <line
-                  x1="680"
-                  y1="160"
-                  x2="480"
-                  y2="160"
-                  stroke={isSwitchClosed ? "#2583E8" : "#94A3B8"}
-                  strokeWidth="5"
-                />
-                <line
-                  x1="320"
-                  y1="160"
-                  x2="120"
-                  y2="160"
-                  stroke={isSwitchClosed ? "#2583E8" : "#94A3B8"}
-                  strokeWidth="5"
-                />
-                {/* Current animation */}
-                {isSwitchClosed && iTotal > 0 && (
-                  <>
+                  {/* Animated electron current if closed */}
+                  {circuitStats.isClosedLoop && circuitStats.currentTotal > 0 && (
                     <path
-                      d="M 120 60 L 680 60 L 680 260 L 120 260 Z"
+                      d={pathD}
                       fill="none"
                       stroke="#FFD45A"
-                      strokeWidth="3"
-                      strokeDasharray="6 14"
+                      strokeWidth="2.5"
+                      strokeDasharray="6 12"
+                      className="animate-pulse"
                     />
-                    <line
-                      x1="120"
-                      y1="160"
-                      x2="680"
-                      y2="160"
-                      stroke="#FFD45A"
-                      strokeWidth="3"
-                      strokeDasharray="6 14"
-                    />
-                  </>
-                )}
-              </g>
-            )}
-
-            {/* Battery Component (Left branch at x=120) */}
-            <g transform="translate(80, 130)">
-              {/* Battery Body */}
-              <rect x="25" y="0" width="30" height="60" rx="4" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
-              {/* Battery Terminals */}
-              <rect x="35" y="-6" width="10" height="6" fill="#F59E0B" rx="1" />
-              <line x1="15" y1="15" x2="30" y2="15" stroke="#FFFFFF" strokeWidth="2" />
-              <line x1="22.5" y1="7.5" x2="22.5" y2="22.5" stroke="#FFFFFF" strokeWidth="2" />
-              <line x1="15" y1="45" x2="30" y2="45" stroke="#94A3B8" strokeWidth="2" />
-              <text x="40" y="35" fill="#FFFFFF" fontSize="11" fontWeight="bold" textAnchor="middle">
-                {voltage}V
-              </text>
-              <text x="40" y="76" fill="#174A8B" fontSize="10" fontWeight="bold" textAnchor="middle">
-                Baterai
-              </text>
-            </g>
-
-            {/* Switch Component (Bottom branch) */}
-            <g
-              transform="translate(230, 240)"
-              className="cursor-pointer"
-              onClick={() => setIsSwitchClosed(!isSwitchClosed)}
-            >
-              {/* Background Plate */}
-              <rect x="0" y="0" width="100" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1.5" />
-              <circle cx="20" cy="20" r="4" fill="#334155" />
-              <circle cx="80" cy="20" r="4" fill="#334155" />
-              {/* Switch Lever */}
-              {isSwitchClosed ? (
-                <line x1="20" y1="20" x2="80" y2="20" stroke="#23845B" strokeWidth="4" strokeLinecap="round" />
-              ) : (
-                <line x1="20" y1="20" x2="70" y2="-5" stroke="#C43D4B" strokeWidth="4" strokeLinecap="round" />
-              )}
-              <text x="50" y="32" fill="#64748B" fontSize="9" fontWeight="bold" textAnchor="middle">
-                {isSwitchClosed ? "Sakelar Tertutup" : "Sakelar Terbuka"}
-              </text>
-            </g>
-
-            {/* Digital Ammeter in Circuit */}
-            <g transform="translate(400, 242)">
-              <rect x="0" y="0" width="110" height="36" rx="6" fill="#172B45" stroke="#2583E8" strokeWidth="1.5" />
-              <text x="12" y="22" fill="#60A5FA" fontSize="11" fontWeight="bold">
-                Ammeter:
-              </text>
-              <text x="75" y="22" fill="#34D399" fontSize="12" fontWeight="mono" fontWeight-bold="true">
-                {iTotal} A
-              </text>
-            </g>
-
-            {/* Load 1: Lamp 1 */}
-            {(() => {
-              const lamp1X = circuitType === "series" ? 380 : circuitType === "parallel" ? 400 : 400;
-              const lamp1Y = circuitType === "parallel" ? 60 : 60;
-
-              return (
-                <g transform={`translate(${lamp1X - 35}, ${lamp1Y - 35})`}>
-                  {/* Glowing halo */}
-                  {lamp1Brightness > 0.05 && (
-                    <circle cx="35" cy="35" r={30 + lamp1Brightness * 40} fill="url(#lamp1-glow)" />
                   )}
-                  {/* Lamp Bulb */}
-                  <circle
-                    cx="35"
-                    cy="35"
-                    r="24"
-                    fill={isSwitchClosed && p1 > 0 ? "#FEF08A" : "#F1F5F9"}
-                    stroke="#475569"
-                    strokeWidth="2.5"
-                  />
-                  {/* Filament */}
-                  <path
-                    d="M 27 45 L 31 30 L 35 38 L 39 30 L 43 45"
-                    fill="none"
-                    stroke={isSwitchClosed && p1 > 0 ? "#EA580C" : "#94A3B8"}
-                    strokeWidth="2"
-                  />
-                  {/* Lamp base */}
-                  <rect x="27" y="47" width="16" height="8" fill="#64748B" rx="1" />
-                  {/* Labels */}
-                  <text x="35" y="72" fill="#172B45" fontSize="11" fontWeight="bold" textAnchor="middle">
-                    Lampu 1 ({resistance1}Ω)
-                  </text>
-                  <text x="35" y="86" fill="#2583E8" fontSize="10" font-mono textAnchor="middle">
-                    {v1}V | {p1}W
-                  </text>
                 </g>
               );
-            })()}
+            })}
 
-            {/* Load 2: Lamp 2 (only in series or parallel) */}
-            {circuitType !== "single" && (() => {
-              const lamp2X = circuitType === "series" ? 560 : 400;
-              const lamp2Y = circuitType === "series" ? 60 : 160;
+            {/* Render Placed Components */}
+            {components.map((c) => {
+              const isSelected = selectedCompId === c.id;
 
               return (
-                <g transform={`translate(${lamp2X - 35}, ${lamp2Y - 35})`}>
-                  {/* Glowing halo */}
-                  {lamp2Brightness > 0.05 && (
-                    <circle cx="35" cy="35" r={30 + lamp2Brightness * 40} fill="url(#lamp2-glow)" />
+                <g
+                  key={c.id}
+                  transform={`translate(${c.x}, ${c.y})`}
+                  onPointerDown={(e) => handlePointerDown(e, c)}
+                  className="cursor-move"
+                >
+                  {/* Selection Highlight */}
+                  {isSelected && (
+                    <rect
+                      x="-55"
+                      y="-45"
+                      width="110"
+                      height="90"
+                      rx="12"
+                      fill="#DDF0FF"
+                      fillOpacity="0.3"
+                      stroke="#2583E8"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                    />
                   )}
-                  {/* Lamp Bulb */}
-                  <circle
-                    cx="35"
-                    cy="35"
-                    r="24"
-                    fill={isSwitchClosed && p2 > 0 ? "#FEF08A" : "#F1F5F9"}
-                    stroke="#475569"
-                    strokeWidth="2.5"
-                  />
-                  {/* Filament */}
-                  <path
-                    d="M 27 45 L 31 30 L 35 38 L 39 30 L 43 45"
-                    fill="none"
-                    stroke={isSwitchClosed && p2 > 0 ? "#EA580C" : "#94A3B8"}
-                    strokeWidth="2"
-                  />
-                  {/* Lamp base */}
-                  <rect x="27" y="47" width="16" height="8" fill="#64748B" rx="1" />
-                  {/* Labels */}
-                  <text x="35" y="72" fill="#172B45" fontSize="11" fontWeight="bold" textAnchor="middle">
-                    Lampu 2 ({resistance2}Ω)
-                  </text>
-                  <text x="35" y="86" fill="#2583E8" fontSize="10" font-mono textAnchor="middle">
-                    {v2}V | {p2}W
-                  </text>
+
+                  {/* BATTERY COMPONENT */}
+                  {c.type === "battery" && (
+                    <g>
+                      <rect x="-40" y="-25" width="80" height="50" rx="8" fill="#1E293B" stroke="#0F172A" strokeWidth="2" />
+                      <rect x="-10" y="-32" width="20" height="8" rx="2" fill="#F59E0B" />
+                      <text x="0" y="5" fill="#FFFFFF" fontSize="12" fontWeight="bold" textAnchor="middle">
+                        {c.voltage}V
+                      </text>
+                      <text x="0" y="38" fill="#174A8B" fontSize="10" fontWeight="bold" textAnchor="middle">
+                        {c.label}
+                      </text>
+                    </g>
+                  )}
+
+                  {/* LAMP BULB COMPONENT */}
+                  {c.type === "lamp" && (
+                    <g>
+                      {/* Glow if current flowing */}
+                      {circuitStats.isClosedLoop && (
+                        <circle cx="0" cy="-10" r="42" fill="#FEF08A" fillOpacity="0.45" />
+                      )}
+                      {/* Glass bulb */}
+                      <circle
+                        cx="0"
+                        cy="-10"
+                        r="24"
+                        fill={circuitStats.isClosedLoop ? "#FEF08A" : "#FFFFFF"}
+                        stroke="#475569"
+                        strokeWidth="2"
+                      />
+                      {/* Filament */}
+                      <path
+                        d="M -7 5 L -4 -10 L 0 -4 L 4 -10 L 7 5"
+                        fill="none"
+                        stroke={circuitStats.isClosedLoop ? "#EA580C" : "#94A3B8"}
+                        strokeWidth="2"
+                      />
+                      {/* Socket */}
+                      <rect x="-12" y="5" width="24" height="15" rx="2" fill="#64748B" />
+                      <text x="0" y="34" fill="#172B45" fontSize="10" fontWeight="bold" textAnchor="middle">
+                        {c.label}
+                      </text>
+                    </g>
+                  )}
+
+                  {/* SWITCH COMPONENT */}
+                  {c.type === "switch" && (
+                    <g onClick={() => toggleSwitch(c.id)} className="cursor-pointer">
+                      <rect x="-45" y="-18" width="90" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1.5" />
+                      <circle cx="-25" cy="0" r="4" fill="#334155" />
+                      <circle cx="25" cy="0" r="4" fill="#334155" />
+                      {/* Switch Lever */}
+                      {c.isClosed ? (
+                        <line x1="-25" y1="0" x2="25" y2="0" stroke="#23845B" strokeWidth="4" strokeLinecap="round" />
+                      ) : (
+                        <line x1="-25" y1="0" x2="15" y2="-22" stroke="#C43D4B" strokeWidth="4" strokeLinecap="round" />
+                      )}
+                      <text x="0" y="32" fill="#64748B" fontSize="10" fontWeight="bold" textAnchor="middle">
+                        {c.isClosed ? "Sakelar ON" : "Sakelar OFF"}
+                      </text>
+                    </g>
+                  )}
+
+                  {/* RESISTOR COMPONENT */}
+                  {c.type === "resistor" && (
+                    <g>
+                      <rect x="-35" y="-15" width="70" height="30" rx="4" fill="#F1F5F9" stroke="#64748B" strokeWidth="2" />
+                      <line x1="-20" y1="-15" x2="-20" y2="15" stroke="#EA580C" strokeWidth="3" />
+                      <line x1="-5" y1="-15" x2="-5" y2="15" stroke="#3B82F6" strokeWidth="3" />
+                      <line x1="10" y1="-15" x2="10" y2="15" stroke="#10B981" strokeWidth="3" />
+                      <text x="0" y="32" fill="#172B45" fontSize="10" fontWeight="bold" textAnchor="middle">
+                        {c.label}
+                      </text>
+                    </g>
+                  )}
+
+                  {/* TERMINAL PINS (FOR CONNECTING WIRES) */}
+                  {c.terminals.map((term) => {
+                    const isPinActive = activeWiringPin?.termId === term.id;
+
+                    return (
+                      <g
+                        key={term.id}
+                        transform={`translate(${term.relX}, ${term.relY})`}
+                        data-pin="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePinClick(c.id, term.id);
+                        }}
+                        className="cursor-pointer group"
+                      >
+                        <circle
+                          cx="0"
+                          cy="0"
+                          r={isPinActive ? "8" : "6"}
+                          fill={isPinActive ? "#FFD45A" : term.label === "+" ? "#EF4444" : "#2583E8"}
+                          stroke="#FFFFFF"
+                          strokeWidth="2"
+                          className="hover:scale-125 transition-transform"
+                        />
+                        <text
+                          x="0"
+                          y="-10"
+                          fontSize="9"
+                          fill="#174A8B"
+                          fontWeight="bold"
+                          textAnchor="middle"
+                          className="pointer-events-none"
+                        >
+                          {term.label}
+                        </text>
+                      </g>
+                    );
+                  })}
                 </g>
               );
-            })()}
+            })}
           </svg>
         </div>
 
-        {/* Action Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-[#DCE6F1]">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsSwitchClosed(!isSwitchClosed)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-xs transition-all ${
-                isSwitchClosed
-                  ? "bg-[#C43D4B] text-white hover:bg-[#b0303e]"
-                  : "bg-[#23845B] text-white hover:bg-[#1d6d4a]"
-              }`}
-            >
-              <Power className="w-4 h-4" />
-              {isSwitchClosed ? "Buka Sakelar (Putus Arus)" : "Tutup Sakelar (Alirkan Arus)"}
-            </button>
+        {/* Selected Component Parameter Adjuster */}
+        {selectedComp && (
+          <div className="mt-4 p-4 rounded-xl bg-[#F3F8FF] border border-[#DCE6F1] flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-[#174A8B]">
+                Komponen Terpilih: <strong>{selectedComp.label}</strong>
+              </span>
 
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-[#617187] hover:text-[#C43D4B] bg-white hover:bg-red-50 border border-[#DCE6F1]"
-              title="Reset ke pengaturan awal"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reset
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRecordData}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-[#23845B] text-white hover:bg-[#1d6d4a] shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              Catat Pengukuran
-            </button>
-            <button
-              onClick={() => setShowTable(!showTable)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border ${
-                showTable
-                  ? "bg-[#DDF0FF] border-[#2583E8] text-[#174A8B] font-semibold"
-                  : "bg-white border-[#DCE6F1] text-[#617187]"
-              }`}
-            >
-              <Table className="w-4 h-4" />
-              Tabel Catatan ({recordedData.length})
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Control Sliders & Configuration */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Topology Selector */}
-        <div className="bg-white rounded-xl border border-[#DCE6F1] p-4 shadow-xs">
-          <label className="text-xs font-bold text-[#172B45] mb-2 block flex items-center gap-1.5">
-            <Zap className="w-4 h-4 text-[#2583E8]" />
-            Pilihan Rangkaian
-          </label>
-          <div className="flex flex-col gap-1.5 mt-2">
-            <button
-              onClick={() => setCircuitType("series")}
-              className={`py-2 px-3 rounded-lg text-xs font-medium text-left transition-all border ${
-                circuitType === "series"
-                  ? "bg-[#2583E8] text-white border-[#2583E8]"
-                  : "bg-white text-[#617187] border-[#DCE6F1] hover:bg-[#F3F8FF]"
-              }`}
-            >
-              Rangkaian Seri
-              <span className="block text-[10px] opacity-80">R_total = R1 + R2</span>
-            </button>
-            <button
-              onClick={() => setCircuitType("parallel")}
-              className={`py-2 px-3 rounded-lg text-xs font-medium text-left transition-all border ${
-                circuitType === "parallel"
-                  ? "bg-[#2583E8] text-white border-[#2583E8]"
-                  : "bg-white text-[#617187] border-[#DCE6F1] hover:bg-[#F3F8FF]"
-              }`}
-            >
-              Rangkaian Paralel
-              <span className="block text-[10px] opacity-80">1/R = 1/R1 + 1/R2</span>
-            </button>
-            <button
-              onClick={() => setCircuitType("single")}
-              className={`py-2 px-3 rounded-lg text-xs font-medium text-left transition-all border ${
-                circuitType === "single"
-                  ? "bg-[#2583E8] text-white border-[#2583E8]"
-                  : "bg-white text-[#617187] border-[#DCE6F1] hover:bg-[#F3F8FF]"
-              }`}
-            >
-              Rangkaian Tunggal
-              <span className="block text-[10px] opacity-80">1 Lampu Saja</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Battery Voltage Slider */}
-        <div className="bg-white rounded-xl border border-[#DCE6F1] p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-bold text-[#172B45] flex items-center gap-1.5">
-              <Sliders className="w-4 h-4 text-[#174A8B]" />
-              Tegangan (V)
-            </label>
-            <span className="text-sm font-mono font-bold text-[#174A8B] bg-[#F3F8FF] px-2 py-0.5 rounded border border-[#DCE6F1]">
-              {voltage} V
-            </span>
-          </div>
-          <p className="text-[11px] text-[#617187] mb-2">Beda potensial sumber energi baterai.</p>
-          <input
-            type="range"
-            min="3"
-            max="24"
-            step="1.5"
-            value={voltage}
-            onChange={(e) => setVoltage(Number(e.target.value))}
-            className="w-full accent-[#174A8B] cursor-pointer"
-          />
-          <div className="flex justify-between gap-1 mt-2">
-            {[3, 6, 9, 12, 24].map((val) => (
-              <button
-                key={val}
-                onClick={() => setVoltage(val)}
-                className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
-                  voltage === val
-                    ? "bg-[#174A8B] text-white border-[#174A8B]"
-                    : "bg-[#F8FAFC] text-[#617187] border-[#DCE6F1]"
-                }`}
-              >
-                {val}V
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Resistance Lamp 1 */}
-        <div className="bg-white rounded-xl border border-[#DCE6F1] p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-bold text-[#172B45] flex items-center gap-1.5">
-              <Sliders className="w-4 h-4 text-[#2583E8]" />
-              Hambatan R1
-            </label>
-            <span className="text-sm font-mono font-bold text-[#2583E8] bg-[#F3F8FF] px-2 py-0.5 rounded border border-[#DCE6F1]">
-              {resistance1} Ω
-            </span>
-          </div>
-          <p className="text-[11px] text-[#617187] mb-2">Resistansi beban Lampu 1.</p>
-          <input
-            type="range"
-            min="5"
-            max="40"
-            step="5"
-            value={resistance1}
-            onChange={(e) => setResistance1(Number(e.target.value))}
-            className="w-full accent-[#2583E8] cursor-pointer"
-          />
-          <div className="flex justify-between gap-1 mt-2">
-            {[5, 10, 20, 30, 40].map((val) => (
-              <button
-                key={val}
-                onClick={() => setResistance1(val)}
-                className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
-                  resistance1 === val
-                    ? "bg-[#2583E8] text-white border-[#2583E8]"
-                    : "bg-[#F8FAFC] text-[#617187] border-[#DCE6F1]"
-                }`}
-              >
-                {val}Ω
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Resistance Lamp 2 */}
-        <div className="bg-white rounded-xl border border-[#DCE6F1] p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-bold text-[#172B45] flex items-center gap-1.5">
-              <Sliders className="w-4 h-4 text-[#A96508]" />
-              Hambatan R2
-            </label>
-            <span className="text-sm font-mono font-bold text-[#A96508] bg-[#FFF4C7] px-2 py-0.5 rounded border border-[#FFD45A]/40">
-              {resistance2} Ω
-            </span>
-          </div>
-          <p className="text-[11px] text-[#617187] mb-2">
-            {circuitType === "single" ? "Nonaktif pada mode tunggal." : "Resistansi beban Lampu 2."}
-          </p>
-          <input
-            type="range"
-            min="5"
-            max="40"
-            step="5"
-            disabled={circuitType === "single"}
-            value={resistance2}
-            onChange={(e) => setResistance2(Number(e.target.value))}
-            className="w-full accent-[#A96508] cursor-pointer disabled:opacity-40"
-          />
-          <div className="flex justify-between gap-1 mt-2">
-            {[5, 10, 20, 30, 40].map((val) => (
-              <button
-                key={val}
-                disabled={circuitType === "single"}
-                onClick={() => setResistance2(val)}
-                className={`text-[10px] px-1.5 py-0.5 rounded border font-mono disabled:opacity-40 ${
-                  resistance2 === val
-                    ? "bg-[#A96508] text-white border-[#A96508]"
-                    : "bg-[#F8FAFC] text-[#617187] border-[#DCE6F1]"
-                }`}
-              >
-                {val}Ω
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Observation Data Table */}
-      {showTable && (
-        <div className="bg-white rounded-xl border border-[#DCE6F1] p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#DCE6F1]">
-            <div>
-              <h3 className="text-xs font-bold text-[#174A8B] flex items-center gap-1.5">
-                <Table className="w-4 h-4 text-[#23845B]" />
-                Tabel Catatan Pengukuran Kelistrikan
-              </h3>
-              <p className="text-[11px] text-[#617187]">
-                Perhatikan bagaimana perbandingan nilai kuat arus dan daya lampu pada rangkaian seri vs paralel.
-              </p>
-            </div>
-            {recordedData.length > 0 && (
-              <button
-                onClick={() => setRecordedData([])}
-                className="text-[11px] text-[#C43D4B] hover:underline"
-              >
-                Hapus Semua Data
-              </button>
-            )}
-          </div>
-
-          {recordedData.length === 0 ? (
-            <div className="py-6 text-center text-xs text-[#617187] bg-[#F8FAFC] rounded-lg border border-dashed border-[#DCE6F1]">
-              Belum ada data pengukuran yang dicatat. Klik{" "}
-              <strong className="text-[#23845B]">"Catat Pengukuran"</strong> di atas.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#F3F8FF] text-[#174A8B] border-b border-[#DCE6F1]">
-                    <th className="p-2 font-semibold">No</th>
-                    <th className="p-2 font-semibold">Tipe Rangkaian</th>
-                    <th className="p-2 font-semibold">Sakelar</th>
-                    <th className="p-2 font-semibold">Tegangan V</th>
-                    <th className="p-2 font-semibold">R1 (Ω)</th>
-                    <th className="p-2 font-semibold">R2 (Ω)</th>
-                    <th className="p-2 font-semibold text-[#A96508]">R_total (Ω)</th>
-                    <th className="p-2 font-semibold text-[#2583E8]">I_total (A)</th>
-                    <th className="p-2 font-semibold text-[#23845B]">Daya P (W)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#DCE6F1]">
-                  {recordedData.map((d, index) => (
-                    <tr key={d.id} className="hover:bg-[#F8FAFC]">
-                      <td className="p-2 font-mono text-[#617187]">{index + 1}</td>
-                      <td className="p-2 font-medium">{d.mode}</td>
-                      <td className="p-2">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            d.switchState === "Tertutup"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {d.switchState}
-                        </span>
-                      </td>
-                      <td className="p-2 font-mono">{d.voltage}V</td>
-                      <td className="p-2 font-mono">{d.r1}</td>
-                      <td className="p-2 font-mono">{d.r2 || "-"}</td>
-                      <td className="p-2 font-mono font-bold text-[#A96508]">{d.rTotal}</td>
-                      <td className="p-2 font-mono font-bold text-[#2583E8] bg-[#F3F8FF]/50">
-                        {d.currentTotal}
-                      </td>
-                      <td className="p-2 font-mono font-bold text-[#23845B]">{d.powerTotal}</td>
-                    </tr>
+              {/* Adjust Voltage */}
+              {selectedComp.type === "battery" && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[#617187]">Tegangan:</label>
+                  {[3, 6, 9, 12, 24].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() =>
+                        setComponents((prev) =>
+                          prev.map((c) =>
+                            c.id === selectedComp.id ? { ...c, voltage: v, label: `Baterai ${v}V` } : c
+                          )
+                        )
+                      }
+                      className={`text-xs px-2 py-0.5 rounded border font-mono ${
+                        selectedComp.voltage === v
+                          ? "bg-[#2583E8] text-white border-[#2583E8]"
+                          : "bg-white text-[#172B45] border-[#DCE6F1]"
+                      }`}
+                    >
+                      {v}V
+                    </button>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              )}
+
+              {/* Adjust Resistance */}
+              {(selectedComp.type === "lamp" || selectedComp.type === "resistor") && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[#617187]">Hambatan:</label>
+                  {[5, 10, 20, 30].map((r) => (
+                    <button
+                      key={r}
+                      onClick={() =>
+                        setComponents((prev) =>
+                          prev.map((c) =>
+                            c.id === selectedComp.id
+                              ? {
+                                  ...c,
+                                  resistance: r,
+                                  label: `${selectedComp.type === "lamp" ? "Lampu" : "Resistor"} (${r}Ω)`
+                                }
+                              : c
+                          )
+                        )
+                      }
+                      className={`text-xs px-2 py-0.5 rounded border font-mono ${
+                        selectedComp.resistance === r
+                          ? "bg-[#2583E8] text-white border-[#2583E8]"
+                          : "bg-white text-[#172B45] border-[#DCE6F1]"
+                      }`}
+                    >
+                      {r}Ω
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+
+            <button
+              onClick={deleteSelected}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#C43D4B] bg-white border border-red-200 hover:bg-red-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Hapus Komponen Ini
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
