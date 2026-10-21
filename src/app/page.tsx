@@ -7,8 +7,11 @@ import LabCard from "@/components/topic/LabCard";
 import {
   getUserProfile,
   getStoredProgress,
+  DEFAULT_PROFILE,
+  DEFAULT_PROGRESS,
   UserProfile
 } from "@/lib/storage";
+import { UserOverallProgress } from "@/types";
 import {
   Flame,
   Play,
@@ -22,8 +25,8 @@ import {
 
 export default function HomePage() {
   const [activeFilter, setActiveFilter] = useState<string>("Semua");
-  const [profile, setProfile] = useState<UserProfile>(getUserProfile());
-  const [progress, setProgress] = useState(getStoredProgress());
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [progress, setProgress] = useState<UserOverallProgress>(DEFAULT_PROGRESS);
 
   useEffect(() => {
     setProfile(getUserProfile());
@@ -63,7 +66,7 @@ export default function HomePage() {
           <span className="text-[11px] font-bold text-[#1E3A53] tracking-widest uppercase block mb-1">
             Selamat Datang Kembali
           </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#172B45] tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#172B45] tracking-tight" suppressHydrationWarning>
             Halo, {profile.name}! Siap bereksperimen?
           </h2>
           <p className="text-xs text-[#617187] mt-1">
@@ -80,7 +83,7 @@ export default function HomePage() {
             <Flame className="w-5 h-5 fill-[#D97706]" />
           </div>
           <div className="text-left">
-            <span className="text-xs font-bold text-[#172B45] block leading-tight">
+            <span className="text-xs font-bold text-[#172B45] block leading-tight" suppressHydrationWarning>
               {profile.streakDays} Hari
             </span>
             <span className="text-[10px] text-[#617187] leading-none">
@@ -181,12 +184,12 @@ export default function HomePage() {
                   <span className="text-[10px] text-[#617187] font-medium block">
                     Eksperimen Selesai
                   </span>
-                  <span className="text-base font-extrabold text-[#172B45] font-mono">
+                  <span className="text-base font-extrabold text-[#172B45] font-mono" suppressHydrationWarning>
                     {completedLabsCount} <span className="text-xs text-[#8AA2BA]">/ {TOPICS.length}</span>
                   </span>
                 </div>
               </div>
-              <span className="text-xs font-bold text-[#0284C7] bg-[#E0F2FE] px-2 py-0.5 rounded-full">
+              <span className="text-xs font-bold text-[#0284C7] bg-[#E0F2FE] px-2 py-0.5 rounded-full" suppressHydrationWarning>
                 {labPercent}%
               </span>
             </div>
@@ -207,12 +210,12 @@ export default function HomePage() {
                   <span className="text-[10px] text-[#617187] font-medium block">
                     Lencana Terbuka
                   </span>
-                  <span className="text-base font-extrabold text-[#172B45] font-mono">
+                  <span className="text-base font-extrabold text-[#172B45] font-mono" suppressHydrationWarning>
                     {profile.badges.filter(b => b.unlocked).length} <span className="text-xs text-[#8AA2BA]">/ {profile.badges.length}</span>
                   </span>
                 </div>
               </div>
-              <span className="text-xs font-bold text-[#D97706] bg-[#FEF3C7] px-2 py-0.5 rounded-full">
+              <span className="text-xs font-bold text-[#D97706] bg-[#FEF3C7] px-2 py-0.5 rounded-full" suppressHydrationWarning>
                 {Math.round((profile.badges.filter(b => b.unlocked).length / profile.badges.length) * 100)}%
               </span>
             </div>
@@ -236,12 +239,12 @@ export default function HomePage() {
                   <span className="text-[10px] text-[#617187] font-medium block">
                     Waktu Belajar
                   </span>
-                  <span className="text-base font-extrabold text-[#172B45] font-mono">
+                  <span className="text-base font-extrabold text-[#172B45] font-mono" suppressHydrationWarning>
                     {profile.learningHours} <span className="text-xs text-[#8AA2BA]">Jam</span>
                   </span>
                 </div>
               </div>
-              <span className="text-xs font-bold text-[#16A34A] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
+              <span className="text-xs font-bold text-[#16A34A] bg-[#DCFCE7] px-2 py-0.5 rounded-full" suppressHydrationWarning>
                 {profile.streakDays} Hari Streak
               </span>
             </div>

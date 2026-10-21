@@ -30,7 +30,7 @@ export interface UserSettings {
   highContrast: boolean;
 }
 
-const DEFAULT_PROFILE: UserProfile = {
+export const DEFAULT_PROFILE: UserProfile = {
   name: "Raka Aditya",
   classGrade: "Kelas VIII-A SMP",
   school: "SMP Negeri 1 Surabaya",
@@ -78,7 +78,7 @@ const DEFAULT_PROFILE: UserProfile = {
   ]
 };
 
-const DEFAULT_SETTINGS: UserSettings = {
+export const DEFAULT_SETTINGS: UserSettings = {
   soundEnabled: true,
   animationSpeed: "normal",
   aiPromptStyle: "socratic",
@@ -86,45 +86,45 @@ const DEFAULT_SETTINGS: UserSettings = {
   highContrast: false
 };
 
+export const DEFAULT_PROGRESS: UserOverallProgress = {
+  "gaya-dan-gerak": {
+    materialCompleted: true,
+    labCompleted: true,
+    quizScore: 5,
+    quizTotal: 6,
+    quizPercentage: 83,
+    quizDate: "20/10/2026"
+  },
+  "kelistrikan": {
+    materialCompleted: true,
+    labCompleted: true,
+    quizScore: 6,
+    quizTotal: 6,
+    quizPercentage: 100,
+    quizDate: "21/10/2026"
+  },
+  "cahaya-dan-optik": {
+    materialCompleted: true,
+    labCompleted: false,
+    quizScore: 4,
+    quizTotal: 6,
+    quizPercentage: 67,
+    quizDate: "19/10/2026"
+  }
+};
+
 // PROGRESS
 export function getStoredProgress(): UserOverallProgress {
-  if (typeof window === "undefined") return {};
+  if (typeof window === "undefined") return DEFAULT_PROGRESS;
   try {
     const raw = localStorage.getItem(PROGRESS_KEY);
     if (!raw) {
-      // default mock initial state if empty
-      const initial: UserOverallProgress = {
-        "gaya-dan-gerak": {
-          materialCompleted: true,
-          labCompleted: true,
-          quizScore: 5,
-          quizTotal: 6,
-          quizPercentage: 83,
-          quizDate: "20/10/2026"
-        },
-        "kelistrikan": {
-          materialCompleted: true,
-          labCompleted: true,
-          quizScore: 6,
-          quizTotal: 6,
-          quizPercentage: 100,
-          quizDate: "21/10/2026"
-        },
-        "cahaya-dan-optik": {
-          materialCompleted: true,
-          labCompleted: false,
-          quizScore: 4,
-          quizTotal: 6,
-          quizPercentage: 67,
-          quizDate: "19/10/2026"
-        }
-      };
-      localStorage.setItem(PROGRESS_KEY, JSON.stringify(initial));
-      return initial;
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify(DEFAULT_PROGRESS));
+      return DEFAULT_PROGRESS;
     }
     return JSON.parse(raw);
   } catch (e) {
-    return {};
+    return DEFAULT_PROGRESS;
   }
 }
 
