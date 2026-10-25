@@ -2,7 +2,6 @@ import { TOPICS, getTopicBySlug } from "@/data/topics";
 import { notFound } from "next/navigation";
 import LabClient from "./LabClient";
 
-export const instant = false;
 
 export function generateStaticParams() {
   return TOPICS.map((topic) => ({ slug: topic.slug }));

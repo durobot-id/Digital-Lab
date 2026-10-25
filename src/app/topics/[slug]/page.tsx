@@ -14,7 +14,6 @@ import {
   FileText
 } from "lucide-react";
 
-export const instant = false;
 
 export function generateStaticParams() {
   return TOPICS.map((topic) => ({
